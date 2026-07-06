@@ -41,7 +41,7 @@ This augments a coach-authored plan, and doesn't claim to fully replace a coach 
 
 ## A note on privacy
 
-This repo is public; the athlete's personal record is not in it. The real coaching prompt is supplied at runtime (an environment variable in production, a gitignored local file in development) and falls back to a generic example coach committed here. The clinical source documents never entered the repository, and the commit history was rebuilt clean. What's public is the engineering; what's private stayed private — by design, which is rather the whole thesis of the app.
+Because this repo is public, the "test" athlete's personal record is hidden. Real coaching prompts are supplied at runtime (an environment variable in production, a gitignored local file in development) and fall back to a generic example coach committed here. Clinical source documents from test athletes never enter the repository, and the commit history was rebuilt clean. By design, the engineering is public and the health data is private.
 
 ## Run it
 
