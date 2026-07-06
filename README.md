@@ -1,56 +1,49 @@
-# HRL — personal training & AI coaching app
+# HRL
 
-A mobile-first PWA that unifies workout tracking, recovery, progress analytics,
-and an AI coach that actually knows your training. Built as a single-user app
-you install to your home screen.
+A personal training app with an AI coach that actually knows the athlete — the injuries, the medications, the constraints, the history — and uses that context on every screen and every reply.
 
-> This is a personal project published as a portfolio piece. The owner's real
-> coaching prompt and clinical context are **not** in this repo — the app ships
-> with a generic example coach (see [Configuration](#configuration)).
+Built by Hannah Levinson • more at [hrlevinson.com](https://hrlevinson.com)
 
-## Highlights
+**Live:** [holistic-health-coaching.vercel.app](https://holistic-health-coaching.vercel.app) — a single-user PWA, installed to the home screen.
 
-- **Today** — a schedule-aware home screen with a coach-written morning brief,
-  a Green/Yellow/Red readiness check-in, proactive signals (injury-trend,
-  overtraining, PT slippage, low sleep), and a daily recovery check.
-- **Guided sessions** — one exercise at a time, last-session numbers pre-loaded,
-  per-set completion, a rest timer, PR detection, and a finish screen with
-  volume deltas.
-- **Calendar** — month grid of everything logged, tap any day to review it or
-  backfill a session for that date.
-- **Progress** — hand-rolled SVG charts (lift progression, weekly volume, joint
-  response vs. run load, PT compliance) plus a coach-written weekly review.
-- **Coach** — a streaming chat that automatically sees your recent logs, with
-  persistent cross-conversation memory, a morning brief, and a **progression
-  review** that proposes target changes you can apply to a living program.
-- **Apple Health ingest** — an endpoint an iOS Shortcut can POST sleep / steps /
-  HRV / resting-HR to each morning, feeding the coach objective recovery data.
-- **PWA** — custom icon, standalone display, installs like a native app.
+---
 
-## Stack
+## Why this exists
 
-- [Next.js 16](https://nextjs.org) (App Router) + TypeScript (strict)
-- Tailwind CSS v4
-- [Supabase](https://supabase.com) (Postgres) — all access through server-side
-  API routes using the service-role key; the browser never touches the DB
-- [Anthropic Claude](https://www.anthropic.com) (`claude-sonnet-4-6`) for the
-  coach, morning brief, weekly review, memory consolidation, and progression review
-- Deployed on [Vercel](https://vercel.com)
+A tracker records what you did. A coach decides what you should do next. Almost every fitness app is a tracker wearing a coach's vocabulary: it stores your sets, draws a chart, and hands the judgment back to you. The moment that actually matters — *given everything about me, what should I do today, and what should I not?* — is the moment they leave empty.
 
-## Architecture notes
+That gap is expensive when the answer is load-bearing. A body with long-managed joint injuries doesn't need a rep counter; it needs a decision that reads the whole picture before it's made. A medication that reshapes appetite changes how fueling has to work. A history that makes food fraught changes how nutrition can be discussed at all. Generic advice isn't just unhelpful here — it's the wrong tool for a body with real constraints.
 
-- **Single-user auth** — a passcode gate; the client sends it as a bearer token
-  (or `?key=` for the Health shortcut) and every API route verifies it.
-- **Coach context** — a cached, stable system prompt plus an uncached, per-request
-  context block assembled from the last 14 days of logs, health, recovery, and
-  saved memory (`src/lib/coach-context.ts`).
-- **Living program** — the base program lives in `src/lib/program.ts`; per-exercise
-  target overrides are stored in the DB and merged at read time, so the coach's
-  progression calls actually change the plan.
+So HRL is built the opposite way around. The athlete's clinical and training reality is the center of the system, not a note field bolted to the side. The coaching context — authored with a real coach and physical therapist — is the substrate every feature draws from. The app doesn't try to be a better tracker. It tries to make the call a good coach would make, every day, with the full record in view, and to know the difference between pushing and protecting.
 
-## Configuration
+**The boundary is the point:** this augments a coach-authored plan; it doesn't replace the coach or the PT. The software assembles context, surfaces risk, and proposes progressions. A human — the athlete, her coach — makes the authoritative call.
 
-Create `.env.local`:
+## What it does
+
+**Today knows the day.** A schedule-aware home screen opens with a coach-written morning brief generated from your actual recent logs, a Green/Yellow/Red readiness check-in, and proactive signals that fire without being asked — a rising next-morning ankle score, a volume spike, slipping PT compliance, a run of short nights. The coach's job is to catch the problem before it's a problem; this is that job, made visible.
+
+**Sessions are guided, not filled out.** One exercise at a time, last session's numbers pre-loaded, a rest timer, live PR detection, and a finish screen that tells you how the day compared. Logging becomes the workout's interface instead of paperwork after it.
+
+**The plan is alive.** Program targets aren't frozen in code. When your recent top sets earn a bump, a **progression review** proposes the change with a rationale — and *respects the coaching notes*, so it will raise a bench that's ready and refuse to touch a lift that's explicitly capped for joint safety. Accept it, and the target actually changes everywhere.
+
+**The coach carries the whole record.** The chat automatically sees your last two weeks of training, your run traffic-light status, your recovery check, and your Apple Health data — no pasting context in. It remembers durable facts across conversations, writes a weekly review, and keeps its advice inside your real constraints.
+
+**Recovery and health close the loop.** A ten-second daily check (fueling, post-run protocol, nervous-system work) plus an Apple Health ingest (sleep, HRV, resting heart rate, steps) give the coach the objective and behavioral signals it's supposed to watch, not just the lifts.
+
+## How it's built
+
+- **Next.js 16** (App Router) · **TypeScript** (strict) · **Tailwind v4** — a hand-built design system, no component library.
+- **Supabase** (Postgres) with a strict boundary: the browser never touches the database. Every read and write goes through server API routes using the service-role key; single-user access is gated by a passcode carried as a bearer token.
+- **Anthropic Claude** (`claude-sonnet-4-6`) powers the coach, the morning brief, the weekly review, cross-conversation memory consolidation, and the progression review. The system prompt is cached; a per-request context block (recent logs, health, recovery, saved memory) is assembled fresh and appended uncached, so caching stays effective while the coach stays current.
+- **A living program.** The base program lives in `src/lib/program.ts`; per-exercise overrides live in the database and are merged at read time, which is what lets the coach's proposals become the plan.
+- **Hand-rolled SVG charts**, tuned for the dark theme — no charting dependency.
+- **PWA**: custom icon, standalone display, installs like a native app.
+
+## A note on privacy
+
+This repo is public; the athlete's personal record is not in it. The real coaching prompt is supplied at runtime (an environment variable in production, a gitignored local file in development) and falls back to a generic example coach committed here. The clinical source documents never entered the repository, and the commit history was rebuilt clean. What's public is the engineering; what's private stayed private — by design, which is rather the whole thesis of the app.
+
+## Run it
 
 ```
 SUPABASE_URL=...
@@ -61,19 +54,13 @@ APP_PASSCODE=your-passcode
 COACH_SYSTEM_PROMPT=...
 ```
 
-The coach prompt resolves in order: `COACH_SYSTEM_PROMPT` env var → a local,
-gitignored `coach-prompt.local.md` at the repo root → the generic default in
-`src/lib/system-prompt.ts`.
-
-Database schema lives in Supabase (tables are prefixed `hrl_`): `hrl_logs`,
-`hrl_checkins`, `hrl_recovery`, `hrl_health`, `hrl_conversations`, `hrl_messages`,
-`hrl_memory`, `hrl_briefs`, `hrl_program_overrides`.
+The coach prompt resolves in order: `COACH_SYSTEM_PROMPT` → a gitignored `coach-prompt.local.md` at the repo root → the generic default in `src/lib/system-prompt.ts`. Supabase tables are prefixed `hrl_` (`hrl_logs`, `hrl_checkins`, `hrl_recovery`, `hrl_health`, `hrl_conversations`, `hrl_messages`, `hrl_memory`, `hrl_briefs`, `hrl_program_overrides`).
 
 ```bash
 npm install
 npm run dev
 ```
 
-## License
+---
 
-Personal project — no license granted for reuse of the specific program content.
+Built by Hannah Levinson • more at [hrlevinson.com](https://hrlevinson.com)
