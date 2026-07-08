@@ -19,6 +19,7 @@ import {
   inputClass,
 } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
+import ShareWeek from "@/components/ShareWeek";
 
 type UiMessage = Pick<ChatMessage, "role" | "content">;
 
@@ -311,6 +312,10 @@ export default function CoachView() {
         </div>
 
         <MemoryPanel />
+
+        <div className="mb-4">
+          <ShareWeek variant="inline" />
+        </div>
 
         {conversations.length === 0 ? (
           <EmptyState

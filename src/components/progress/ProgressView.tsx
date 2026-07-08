@@ -13,6 +13,7 @@ import {
 import { Button, Card, Dots, EmptyState, SectionLabel, inputClass } from "@/components/ui";
 import { BarChart, LineChart } from "@/components/progress/charts";
 import { useApp } from "@/components/AppShell";
+import ShareWeek from "@/components/ShareWeek";
 
 function WeekReview() {
   const [content, setContent] = useState<string | null>(null);
@@ -78,6 +79,12 @@ export default function ProgressView() {
       </div>
 
       {!nothingYet && <WeekReview />}
+
+      {!nothingYet && (
+        <div className="mb-5">
+          <ShareWeek />
+        </div>
+      )}
 
       {nothingYet ? (
         <EmptyState
