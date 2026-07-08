@@ -20,6 +20,7 @@ import { Button, Dots, inputClass } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
 import CalendarOverlay from "@/components/today/CalendarOverlay";
 import RecoveryCard from "@/components/today/RecoveryCard";
+import PushOptIn from "@/components/today/PushOptIn";
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
@@ -310,6 +311,9 @@ export default function TodayView() {
       {pending.map((run) => (
         <PendingRunCard key={run.id} run={run} />
       ))}
+
+      {/* Morning coach push opt-in */}
+      <PushOptIn />
 
       {/* Coach brief */}
       <div className="mt-5 border-l-[3px] border-accent pl-3.5 py-0.5">
