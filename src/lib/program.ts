@@ -106,8 +106,8 @@ export const SESSIONS: Record<SessionKey, Session> = {
     label: "Upper Strength",
     subtitle: "Pull-Up Progression",
     exercises: [
-      { id: "u1_bench", name: "Barbell Bench Press", sets: 4, reps: "6–8 reps", target: "74 lbs (44 bar + 15/side)", note: "Primary upper press. 2 reps in reserve. Add 5 lbs total when 4x8 clean." },
-      { id: "u1_pullup", name: "Assisted Pull-Up", sets: 4, reps: "4–6 reps", target: "Assist as needed", note: "Dedicated pull-up progression. Reduce assistance over time. Full hang, chin over bar.", weighted: false },
+      { id: "u1_bench", name: "Barbell Bench Press", sets: 4, reps: "6–8 reps", target: "70 lbs", note: "Primary upper press. Working at 70 after backing off 75, where form broke down at 4–6 reps — the right call. Own 4×8 clean at 1–2 reps in reserve, then take 75 again (double progression). Next milestone 80–90." },
+      { id: "u1_pullup", name: "Assisted Pull-Up", sets: 4, reps: "4–6 reps", target: "~45 lb assist", note: "Dedicated pull-up progression — the biggest upper-body opportunity. Chip the assistance down toward 25–30 lb; the long game is a first strict, unassisted pull-up. Full hang, chin over bar.", weighted: false },
       { id: "u1_pullup_ecc", name: "Assisted Pull-Up — Eccentric Focus", sets: 3, reps: "4–5 reps", target: "Lighter assist", note: "Same machine, set assist LIGHTER than your working sets. Pull up normally, then lower for 4–5 sec. Eccentric overload builds the strength a free-bar eccentric would — no bar needed.", weighted: false },
       { id: "u1_row", name: "Machine / Cable Row", sets: 3, reps: "8–10 reps", target: "Match prior effort", note: "Switched from DB rows — fixed ROM, removes elbow tug. Chest-supported or seated cable, whatever the gym has. Squeeze shoulder blades, controlled return." },
       { id: "u1_sh_press", name: "Shoulder Press (DB)", sets: 3, reps: "8–10 reps", target: "20 lbs", note: "Move to 25 when 3 sets fully controlled." },
