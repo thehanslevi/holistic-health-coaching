@@ -17,6 +17,7 @@ import {
 } from "@/lib/program";
 import { isRunLog, type Checkin, type HealthRow, type Readiness } from "@/lib/types";
 import { phaseWeek } from "@/lib/phase-format";
+import type { CycleState } from "@/lib/cycle";
 import { Button, Dots, inputClass } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
 import CalendarOverlay from "@/components/today/CalendarOverlay";
@@ -174,6 +175,15 @@ export default function TodayView() {
       .catch(() => {});
   }, []);
   const latestHealth = health[0] ?? null;
+
+  // Menstrual cycle (derived phase)
+  const [cycle, setCycle] = useState<CycleState | null>(null);
+  useEffect(() => {
+    api<{ state: CycleState }>("/api/cycle")
+      .then((r) => setCycle(r.state))
+      .catch(() => {});
+  }, []);
+  const showCycle = cycle && (cycle.lastStart || cycle.bleedingToday);
 
   // Stats
   const lastRun = useMemo(() => logs.find(isRunLog), [logs]);
@@ -373,38 +383,48 @@ export default function TodayView() {
         </div>
       </div>
 
-      {/* Apple Health strip */}
-      {latestHealth &&
-        (latestHealth.sleep_hours != null ||
-          latestHealth.steps != null ||
-          latestHealth.hrv != null ||
-          latestHealth.resting_hr != null) && (
+      {/* Apple Health + cycle strip */}
+      {(() => {
+        const hasHealth =
+          latestHealth &&
+          (latestHealth.sleep_hours != null ||
+            latestHealth.steps != null ||
+            latestHealth.hrv != null ||
+            latestHealth.resting_hr != null);
+        if (!hasHealth && !showCycle) return null;
+        return (
           <div className="flex items-center gap-4 mt-3 border border-line px-3.5 py-2.5">
             <span className="label !text-[9px] shrink-0">Health</span>
-            <div className="flex gap-4 flex-wrap">
-              {latestHealth.sleep_hours != null && (
+            <div className="flex gap-4 flex-wrap items-center">
+              {latestHealth?.sleep_hours != null && (
                 <span className="text-[12px] text-muted">
                   <span className="num text-ink">{latestHealth.sleep_hours}</span>h sleep
                 </span>
               )}
-              {latestHealth.steps != null && (
+              {latestHealth?.steps != null && (
                 <span className="text-[12px] text-muted">
                   <span className="num text-ink">{latestHealth.steps.toLocaleString()}</span> steps
                 </span>
               )}
-              {latestHealth.hrv != null && (
+              {latestHealth?.hrv != null && (
                 <span className="text-[12px] text-muted">
                   HRV <span className="num text-ink">{latestHealth.hrv}</span>
                 </span>
               )}
-              {latestHealth.resting_hr != null && (
+              {latestHealth?.resting_hr != null && (
                 <span className="text-[12px] text-muted">
                   RHR <span className="num text-ink">{latestHealth.resting_hr}</span>
                 </span>
               )}
+              {showCycle && cycle && (
+                <span className="display text-[11px] tracking-[0.06em] text-accent-dim border border-accent-dim/40 px-1.5 py-0.5">
+                  {cycle.label}
+                </span>
+              )}
             </div>
           </div>
-        )}
+        );
+      })()}
 
       {/* Week strip */}
       <div className="flex gap-1.5 mt-4">

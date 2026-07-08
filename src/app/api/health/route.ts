@@ -107,6 +107,86 @@ function parseHaeMetrics(metrics: unknown[]): Map<string, DayAgg> {
   return byDate;
 }
 
+// ─── Cycle tracking (menstruation) ────────────────────────────────────────────
+// HAE's cycle format is undocumented, so this is deliberately tolerant: it looks
+// for cycle data in either data.cycleTracking[] or a menstruation metric, pulls a
+// date + flow from whatever field names are present, and stores the raw entry so
+// the exact shape can be confirmed from a real sync.
+
+type CycleUpsert = {
+  date: string;
+  is_period: boolean;
+  flow: string | null;
+  raw: unknown;
+  source: string;
+};
+
+function pickDate(e: Record<string, unknown>): string | null {
+  for (const k of ["date", "startDate", "start", "dateComponents", "day"]) {
+    const v = e[k];
+    if (typeof v === "string" && v.length >= 10) return v.slice(0, 10);
+  }
+  return null;
+}
+
+function pickFlow(e: Record<string, unknown>): string | null {
+  for (const k of ["value", "flow", "menstrualFlow", "flowLevel", "menstrual_flow", "qty"]) {
+    const v = e[k];
+    if (v !== undefined && v !== null && v !== "") return String(v);
+  }
+  return null;
+}
+
+// A logged flow other than "none"/0 is a bleeding day. Apple's "unspecified"
+// still means a period day.
+function isBleed(flow: string | null): boolean {
+  if (flow == null) return false;
+  const f = flow.toLowerCase();
+  return f !== "none" && f !== "0" && f !== "0.0" && f !== "false";
+}
+
+function parseCycle(data: Record<string, unknown>): CycleUpsert[] {
+  const out = new Map<string, CycleUpsert>();
+  const add = (date: string, flow: string | null, period: boolean, raw: unknown) => {
+    out.set(date, { date, is_period: period, flow, raw, source: "health-auto-export" });
+  };
+
+  // 1. Dedicated cycleTracking array.
+  const ct = data.cycleTracking;
+  if (Array.isArray(ct)) {
+    for (const e of ct) {
+      if (!e || typeof e !== "object") continue;
+      const entry = e as Record<string, unknown>;
+      const date = pickDate(entry);
+      if (!date) continue;
+      const flow = pickFlow(entry);
+      // An entry present in cycleTracking with no explicit flow is still a
+      // logged menstruation record → treat as a period day.
+      add(date, flow, flow != null ? isBleed(flow) : true, entry);
+    }
+  }
+
+  // 2. Menstruation exposed as a metric.
+  const metrics = data.metrics;
+  if (Array.isArray(metrics)) {
+    for (const m of metrics) {
+      const metric = m as { name?: string; data?: unknown[] };
+      const norm = (metric?.name ?? "").toLowerCase().replace(/[\s_]+/g, "");
+      if (!/menstru|period|flow/.test(norm)) continue;
+      if (!Array.isArray(metric.data)) continue;
+      for (const p of metric.data) {
+        const point = p as Record<string, unknown>;
+        const date = pickDate(point);
+        if (!date) continue;
+        const flow = pickFlow(point);
+        add(date, flow, isBleed(flow), point);
+      }
+    }
+  }
+
+  return [...out.values()];
+}
+
 function rowFromAgg(date: string, agg: DayAgg, source: string) {
   const row: Record<string, unknown> = { date, source, updated_at: new Date().toISOString() };
   for (const f of NUM_FIELDS) {
@@ -127,19 +207,43 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const db = supabase();
 
-    // Health Auto Export nested format.
-    const metrics = body?.data?.metrics;
-    if (Array.isArray(metrics)) {
-      const byDate = parseHaeMetrics(metrics);
-      const rows = [...byDate.entries()]
-        .map(([date, agg]) => rowFromAgg(date, agg, "health-auto-export"))
-        .filter((r) => NUM_FIELDS.some((f) => r[f] != null));
-      if (!rows.length) {
-        return NextResponse.json({ ok: true, upserted: 0, note: "no mapped metrics in payload" });
+    // Health Auto Export nested format: parse metrics (→ hrl_health) and cycle
+    // tracking (→ hrl_cycle) from the same payload.
+    const hae = body?.data;
+    if (hae && typeof hae === "object") {
+      let healthCount = 0;
+      let healthDates: string[] = [];
+      if (Array.isArray(hae.metrics)) {
+        const byDate = parseHaeMetrics(hae.metrics);
+        const rows = [...byDate.entries()]
+          .map(([date, agg]) => rowFromAgg(date, agg, "health-auto-export"))
+          .filter((r) => NUM_FIELDS.some((f) => r[f] != null));
+        if (rows.length) {
+          const { error } = await db.from("hrl_health").upsert(rows, { onConflict: "date" });
+          if (error) throw new Error(error.message);
+          healthCount = rows.length;
+          healthDates = rows.map((r) => r.date as string);
+        }
       }
-      const { error } = await db.from("hrl_health").upsert(rows, { onConflict: "date" });
-      if (error) throw new Error(error.message);
-      return NextResponse.json({ ok: true, upserted: rows.length, dates: rows.map((r) => r.date) });
+
+      const cycleRows = parseCycle(hae as Record<string, unknown>);
+      if (cycleRows.length) {
+        const { error } = await db
+          .from("hrl_cycle")
+          .upsert(
+            cycleRows.map((r) => ({ ...r, raw: r.raw as object, updated_at: new Date().toISOString() })),
+            { onConflict: "date" },
+          );
+        if (error) throw new Error(error.message);
+      }
+
+      if (Array.isArray(hae.metrics) || Array.isArray(hae.cycleTracking)) {
+        return NextResponse.json({
+          ok: true,
+          health: { upserted: healthCount, dates: healthDates },
+          cycle: { upserted: cycleRows.length, period_days: cycleRows.filter((r) => r.is_period).length },
+        });
+      }
     }
 
     // Flat single-day fallback (legacy Shortcut style).

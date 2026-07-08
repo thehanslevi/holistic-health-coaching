@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cycleContextLine, deriveCycleState, type CycleDay } from "@/lib/cycle";
 import { formatLogAsText } from "@/lib/format";
 import { runTraffic } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
@@ -46,7 +47,8 @@ export async function buildCoachContext(): Promise<{
   const since = daysAgoISO(WINDOW_DAYS);
   const db = supabase();
 
-  const [logsRes, checkinRes, memory, healthRes, ovrRes, recoveryRes] = await Promise.all([
+  const cycleSince = daysAgoISO(180);
+  const [logsRes, checkinRes, memory, healthRes, ovrRes, recoveryRes, cycleRes] = await Promise.all([
     db
       .from("hrl_logs")
       .select("*")
@@ -59,6 +61,7 @@ export async function buildCoachContext(): Promise<{
     db.from("hrl_health").select("*").order("date", { ascending: false }).limit(7),
     db.from("hrl_program_overrides").select("exercise_id, target, note"),
     db.from("hrl_recovery").select("*").order("date", { ascending: false }).limit(1),
+    db.from("hrl_cycle").select("date, is_period, flow").gte("date", cycleSince).order("date", { ascending: true }),
   ]);
   if (logsRes.error) throw new Error(logsRes.error.message);
 
@@ -142,6 +145,9 @@ export async function buildCoachContext(): Promise<{
     if (bits.length)
       lines.push(`Apple Health (as of ${latest.date}): ${bits.join(", ")}.`);
   }
+
+  const cycleLine = cycleContextLine(deriveCycleState((cycleRes.data ?? []) as CycleDay[]));
+  if (cycleLine) lines.push(`Menstrual cycle: ${cycleLine}`);
 
   if (logs.length) {
     lines.push("", "--- RECENT LOGS (newest first) ---");
