@@ -141,3 +141,16 @@ export type CoachContextSummary = {
   sinceDays: number;
   lastLogDate: string | null;
 };
+
+// ─── Program phases (Wave 3 — program-as-data) ────────────────────────────────
+
+export type Phase = {
+  id: string;
+  phase_number: number;
+  name: string;
+  focus: string | null;
+  started_on: string;
+  ended_on: string | null;
+  status: "active" | "archived";
+  created_at: string;
+};

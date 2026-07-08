@@ -1,5 +1,7 @@
 import { getOrCreateWeeklyReview, mondayOf } from "@/lib/review";
-import { PHASE, SESSIONS, runTraffic, type SessionKey } from "@/lib/program";
+import { SESSIONS, runTraffic, type SessionKey } from "@/lib/program";
+import { getActivePhase } from "@/lib/phases";
+import { phaseLabel } from "@/lib/phase-format";
 import { supabase } from "@/lib/supabase";
 import {
   isRunLog,
@@ -73,7 +75,7 @@ export async function buildWeeklyShareText(): Promise<{ text: string; week: stri
   weekEndD.setDate(weekEndD.getDate() + 6);
   const weekEnd = weekEndD.toISOString().slice(0, 10);
 
-  const [logsRes, healthRes, checkinRes, recoveryRes, review] = await Promise.all([
+  const [logsRes, healthRes, checkinRes, recoveryRes, review, phase] = await Promise.all([
     db
       .from("hrl_logs")
       .select("*")
@@ -84,6 +86,7 @@ export async function buildWeeklyShareText(): Promise<{ text: string; week: stri
     db.from("hrl_checkins").select("*").gte("date", week).lte("date", weekEnd),
     db.from("hrl_recovery").select("*").gte("date", week).lte("date", weekEnd),
     getOrCreateWeeklyReview(),
+    getActivePhase(),
   ]);
 
   const logs = (logsRes.data ?? []) as LogRow[];
@@ -95,7 +98,7 @@ export async function buildWeeklyShareText(): Promise<{ text: string; week: stri
 
   const parts: string[] = [];
   parts.push(`HRL — WEEK OF ${rangeLabel.toUpperCase()}`);
-  parts.push(PHASE);
+  parts.push(phaseLabel(phase));
   parts.push("");
   parts.push("── COACH'S WEEKLY REVIEW ──");
   parts.push(review.content);

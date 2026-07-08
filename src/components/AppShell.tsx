@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { api, ApiError, clearPasscode, getPasscode, setPasscode } from "@/lib/client";
-import type { LogRow, ProgramOverride } from "@/lib/types";
+import type { LogRow, Phase, ProgramOverride } from "@/lib/types";
 import { Button, inputClass } from "@/components/ui";
 import TodayView from "@/components/today/TodayView";
 import TrainView from "@/components/train/TrainView";
@@ -40,6 +40,10 @@ type AppContextValue = {
   overrides: Record<string, ProgramOverride>;
   setOverride: (exerciseId: string, target: string | null, note?: string | null) => Promise<void>;
   removeOverride: (exerciseId: string) => Promise<void>;
+  refreshOverrides: () => Promise<void>;
+  // Active training phase (program-as-data)
+  activePhase: Phase | null;
+  refreshPhase: () => Promise<void>;
   lock: () => void;
 };
 
@@ -152,6 +156,7 @@ export default function AppShell() {
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
   const [overrides, setOverrides] = useState<Record<string, ProgramOverride>>({});
+  const [activePhase, setActivePhase] = useState<Phase | null>(null);
 
   useEffect(() => {
     setUnlocked(!!getPasscode());
@@ -181,12 +186,22 @@ export default function AppShell() {
     }
   }, []);
 
+  const refreshPhase = useCallback(async () => {
+    try {
+      const { active } = await api<{ active: Phase | null }>("/api/phases");
+      setActivePhase(active);
+    } catch {
+      /* phase is optional; Today/Train fall back to program.ts constants */
+    }
+  }, []);
+
   useEffect(() => {
     if (unlocked) {
       refreshLogs();
       refreshOverrides();
+      refreshPhase();
     }
-  }, [unlocked, refreshLogs, refreshOverrides]);
+  }, [unlocked, refreshLogs, refreshOverrides, refreshPhase]);
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -233,12 +248,15 @@ export default function AppShell() {
           return next;
         });
       },
+      refreshOverrides,
+      activePhase,
+      refreshPhase,
       lock: () => {
         clearPasscode();
         setUnlocked(false);
       },
     }),
-    [tab, coachDraft, trainIntent, logs, logsLoading, refreshLogs, refreshOverrides, overrides],
+    [tab, coachDraft, trainIntent, logs, logsLoading, refreshLogs, refreshOverrides, overrides, activePhase, refreshPhase],
   );
 
   if (unlocked === null) return null;

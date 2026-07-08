@@ -9,12 +9,14 @@ import {
   WEEKLY_SCHEDULE,
   type SessionKey,
 } from "@/lib/program";
+import { phaseDateRange, phaseLabel } from "@/lib/phase-format";
 import { Card, Segmented, SectionLabel } from "@/components/ui";
 import SessionLogger from "@/components/train/SessionLogger";
 import RunHub from "@/components/train/RunHub";
 import XtrainLogger from "@/components/train/XtrainLogger";
 import HistoryList from "@/components/train/HistoryList";
 import ProgressionReview from "@/components/train/ProgressionReview";
+import ProgramView from "@/components/train/ProgramView";
 import { useApp } from "@/components/AppShell";
 
 type Screen =
@@ -22,10 +24,11 @@ type Screen =
   | { name: "session"; key: SessionKey; date?: string }
   | { name: "run"; date?: string }
   | { name: "xtrain"; date?: string }
-  | { name: "progression" };
+  | { name: "progression" }
+  | { name: "program" };
 
 export default function TrainView() {
-  const { trainIntent, consumeTrainIntent, tab } = useApp();
+  const { trainIntent, consumeTrainIntent, tab, activePhase } = useApp();
   const [screen, setScreen] = useState<Screen>({ name: "home" });
   const [section, setSection] = useState<"start" | "history">("start");
 
@@ -55,6 +58,13 @@ export default function TrainView() {
     return <XtrainLogger initialDate={screen.date} onClose={() => setScreen({ name: "home" })} />;
   if (screen.name === "progression")
     return <ProgressionReview onClose={() => setScreen({ name: "home" })} />;
+  if (screen.name === "program")
+    return (
+      <ProgramView
+        onClose={() => setScreen({ name: "home" })}
+        onOpenProgression={() => setScreen({ name: "progression" })}
+      />
+    );
 
   const todayIdx = (new Date().getDay() + 6) % 7; // MON=0 … SUN=6
 
@@ -62,9 +72,13 @@ export default function TrainView() {
     <div className="px-4 pb-6 fade-up">
       <div className="py-5">
         <h1 className="display-i text-[40px] text-ink">Train</h1>
-        <div className="text-xs text-muted mt-0.5">
-          {PHASE} · {PHASE_DATES}
-        </div>
+        <button
+          onClick={() => setScreen({ name: "program" })}
+          className="text-xs text-muted mt-0.5 hover:text-accent transition-colors cursor-pointer text-left"
+        >
+          {activePhase ? phaseLabel(activePhase) : PHASE} ·{" "}
+          {activePhase ? phaseDateRange(activePhase) : PHASE_DATES} <span className="text-accent">›</span>
+        </button>
       </div>
 
       <div className="mb-4">
@@ -116,7 +130,7 @@ export default function TrainView() {
 
           <Card
             onClick={() => setScreen({ name: "progression" })}
-            className="p-3.5 mb-4 border-accent/40"
+            className="p-3.5 mb-2 border-accent/40"
           >
             <div className="flex items-center justify-between">
               <div>
@@ -125,6 +139,20 @@ export default function TrainView() {
                 </div>
                 <div className="text-[11px] text-muted mt-0.5">
                   Have the coach check if any lift has earned a bump
+                </div>
+              </div>
+              <span className="text-accent text-lg">→</span>
+            </div>
+          </Card>
+
+          <Card onClick={() => setScreen({ name: "program" })} className="p-3.5 mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="display text-[13px] tracking-[0.06em] text-accent">
+                  Program &amp; phases
+                </div>
+                <div className="text-[11px] text-muted mt-0.5">
+                  Advance to a new phase, swap plans, see history
                 </div>
               </div>
               <span className="text-accent text-lg">→</span>

@@ -16,6 +16,7 @@ import {
   todayISO,
 } from "@/lib/program";
 import { isRunLog, type Checkin, type HealthRow, type Readiness } from "@/lib/types";
+import { phaseWeek } from "@/lib/phase-format";
 import { Button, Dots, inputClass } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
 import CalendarOverlay from "@/components/today/CalendarOverlay";
@@ -44,11 +45,6 @@ const READINESS_META: Record<Readiness, { label: string; hint: string; cls: stri
     active: "bg-stop text-bg border-stop",
   },
 };
-
-function weekNumber(): number {
-  const phaseStart = new Date("2026-05-22T00:00:00");
-  return Math.max(1, Math.ceil(((Date.now() - phaseStart.getTime()) / 86400000 + 1) / 7));
-}
 
 function PendingRunCard({ run }: { run: PendingRun }) {
   const { refreshLogs } = useApp();
@@ -110,7 +106,7 @@ function PendingRunCard({ run }: { run: PendingRun }) {
 }
 
 export default function TodayView() {
-  const { logs, goTrain, setTab } = useApp();
+  const { logs, goTrain, setTab, activePhase } = useApp();
   const [checkin, setCheckin] = useState<Checkin | null | undefined>(undefined);
   const [brief, setBrief] = useState<string | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
@@ -220,7 +216,9 @@ export default function TodayView() {
           <span className="text-accent text-[13px] leading-none">▦</span>
         </button>
         <span className="label">
-          Week {weekNumber()} · Phase 3
+          {activePhase
+            ? `Week ${phaseWeek(activePhase)} · Phase ${activePhase.phase_number}`
+            : "Phase 3"}
         </span>
       </div>
 
