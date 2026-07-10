@@ -159,18 +159,29 @@ function parseCycle(data: Record<string, unknown>): CycleUpsert[] {
     out.set(date, { date, is_period: period, flow, raw, source: "health-auto-export" });
   };
 
+  // The cycleTracking array mixes record types — menstrual flow, contraceptive,
+  // sexual activity, ovulation tests, cervical mucus, basal temp. Only menstrual
+  // flow is a period day; everything else must be ignored.
+  const isMenstrualName = (name: string) => /menstru|period|flow/.test(name);
+  const isOtherCycleName = (name: string) =>
+    /contracept|intrauterine|iud|sexual|cervical|ovulation|basal|temperature|symptom|spotting/.test(
+      name,
+    );
+
   // 1. Dedicated cycleTracking array.
   const ct = data.cycleTracking;
   if (Array.isArray(ct)) {
     for (const e of ct) {
       if (!e || typeof e !== "object") continue;
       const entry = e as Record<string, unknown>;
+      const name = String(entry.name ?? "").toLowerCase().replace(/[\s_]+/g, "");
+      if (isOtherCycleName(name)) continue;
+      if (name && !isMenstrualName(name)) continue;
       const date = pickDate(entry);
       if (!date) continue;
       const flow = pickFlow(entry);
-      // An entry present in cycleTracking with no explicit flow is still a
-      // logged menstruation record → treat as a period day.
-      add(date, flow, flow != null ? isBleed(flow) : true, entry);
+      if (!isBleed(flow)) continue; // skip "None"/non-bleeding logs
+      add(date, flow, true, entry);
     }
   }
 
@@ -180,14 +191,15 @@ function parseCycle(data: Record<string, unknown>): CycleUpsert[] {
     for (const m of metrics) {
       const metric = m as { name?: string; data?: unknown[] };
       const norm = (metric?.name ?? "").toLowerCase().replace(/[\s_]+/g, "");
-      if (!/menstru|period|flow/.test(norm)) continue;
+      if (!isMenstrualName(norm) || isOtherCycleName(norm)) continue;
       if (!Array.isArray(metric.data)) continue;
       for (const p of metric.data) {
         const point = p as Record<string, unknown>;
         const date = pickDate(point);
         if (!date) continue;
         const flow = pickFlow(point);
-        add(date, flow, isBleed(flow), point);
+        if (!isBleed(flow)) continue;
+        add(date, flow, true, point);
       }
     }
   }
