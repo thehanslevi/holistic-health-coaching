@@ -42,7 +42,7 @@ export async function getOrCreateDailyBrief(): Promise<{
         role: "user",
         content: `Write my morning brief for today. Today's scheduled slot: "${schedule.label}". My readiness check-in today: ${readiness ?? "not recorded yet"}.
 
-Rules for the brief: 2-3 sentences, direct address, plain text only (no headers, no lists, no preamble like "Here's your brief"). Reference at least one concrete number or signal from my recent logs when logs exist. If readiness is yellow or red, lead with the adjustment. If it's Shabbat, keep it to recovery.`,
+Rules: 1 to 2 short sentences. Plain text only, no headers, no lists, no preamble. Talk like a real coach standing next to me. If there is concrete recent training in the context, mention one real thing from it (a weight, a run, how a joint felt). If there is little or no recent training, DO NOT mention that and DO NOT refer to logs, data, windows, or a "blank slate" in any way at all. Just give me one useful, concrete line for today. If readiness is yellow or red, lead with what to change. If it is Shabbat, one plain line about resting. Obey the voice and banned-word rules in your instructions: no metaphors, no "signal / rhythm / load / lever", no motivational-poster phrasing.`,
       },
     ],
   });

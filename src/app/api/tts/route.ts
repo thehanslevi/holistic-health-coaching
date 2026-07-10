@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
     // Default voice = "Rachel" (warm, calm). Override with ELEVENLABS_VOICE_ID.
     const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
     const model = process.env.ELEVENLABS_MODEL || "eleven_turbo_v2_5";
+    // Slightly quicker than default (1.0); ElevenLabs accepts 0.7–1.2.
+    const speed = Number(process.env.ELEVENLABS_SPEED || "1.1");
 
     const res = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           text: text.slice(0, 4000),
           model_id: model,
-          voice_settings: { stability: 0.4, similarity_boost: 0.75 },
+          voice_settings: { stability: 0.4, similarity_boost: 0.75, speed },
         }),
       },
     );
