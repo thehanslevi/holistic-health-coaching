@@ -5,6 +5,14 @@ import { supabase } from "@/lib/supabase";
 const NUM_FIELDS = ["sleep_hours", "steps", "resting_hr", "hrv", "active_energy"] as const;
 type NumField = (typeof NUM_FIELDS)[number];
 
+// steps / resting_hr / active_energy are integer columns; sleep_hours and hrv
+// keep decimals. Round each to what its column accepts so a decimal (e.g.
+// Active Energy 516.94 kcal) can't blow up the insert.
+const INT_FIELDS = new Set<NumField>(["steps", "resting_hr", "active_energy"]);
+function roundField(f: NumField, v: number): number {
+  return INT_FIELDS.has(f) ? Math.round(v) : Math.round(v * 100) / 100;
+}
+
 export async function GET(req: NextRequest) {
   const unauthorized = checkAuth(req);
   if (unauthorized) return unauthorized;
@@ -191,7 +199,7 @@ function rowFromAgg(date: string, agg: DayAgg, source: string) {
   const row: Record<string, unknown> = { date, source, updated_at: new Date().toISOString() };
   for (const f of NUM_FIELDS) {
     const v = agg[f];
-    if (v != null && !Number.isNaN(v)) row[f] = Math.round(v * 100) / 100;
+    if (v != null && !Number.isNaN(v)) row[f] = roundField(f, v);
   }
   return row;
 }
@@ -258,7 +266,7 @@ export async function POST(req: NextRequest) {
         let n = Number(body[f]);
         if (!Number.isNaN(n)) {
           if (f === "sleep_hours") n = normalizeSleep(n);
-          row[f] = Math.round(n * 100) / 100;
+          row[f] = roundField(f, n);
         }
       }
     }
