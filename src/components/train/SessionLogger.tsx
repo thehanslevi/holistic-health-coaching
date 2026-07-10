@@ -16,8 +16,33 @@ import type { LogRow, SessionLogData, SetEntry } from "@/lib/types";
 import { Button, Delta, Field, SectionLabel, inputClass } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
 import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
+import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
 
 const REST_SECONDS = 90;
+
+// Parse a spoken set like "70 for 8", "8 reps at 70 pounds", "12 reps" into
+// weight/reps. Keyword anchors win; otherwise the larger number is the weight.
+function parseSetSpeech(text: string): { reps?: string; weight?: string } {
+  const lower = text.toLowerCase();
+  let reps: string | undefined;
+  let weight: string | undefined;
+  const repM = lower.match(/(\d+(?:\.\d+)?)\s*reps?\b/);
+  if (repM) reps = repM[1];
+  const wM = lower.match(/(\d+(?:\.\d+)?)\s*(?:pounds?|lbs?)\b/);
+  if (wM) weight = wM[1];
+  if (!reps || !weight) {
+    const nums = lower.match(/\d+(?:\.\d+)?/g);
+    if (nums && nums.length >= 2) {
+      const a = Number(nums[0]);
+      const b = Number(nums[1]);
+      weight = weight ?? String(Math.max(a, b));
+      reps = reps ?? String(Math.min(a, b));
+    } else if (nums && nums.length === 1) {
+      reps = reps ?? nums[0];
+    }
+  }
+  return { reps, weight };
+}
 
 type Stage =
   | { name: "intro" }
@@ -253,6 +278,10 @@ export default function SessionLogger({
       return next;
     });
 
+  // Voice logging: speak a set → transcribe → fill the first not-yet-done set.
+  const voiceFillRef = useRef<(text: string) => void>(() => {});
+  const logVoice = useVoiceRecorder((text) => voiceFillRef.current(text));
+
   // Announce each exercise as you reach it.
   useEffect(() => {
     if (!voiceOn || stage.name !== "exercise") return;
@@ -463,6 +492,24 @@ export default function SessionLogger({
       : null;
     const allTimeMax = weighted ? exerciseMax(logs, ex.id) : 0;
 
+    // Voice logging fills the first not-yet-completed set of this exercise.
+    voiceFillRef.current = (text: string) => {
+      const { reps, weight } = parseSetSpeech(text);
+      if (!reps && !weight) return;
+      for (let i = 0; i < ex.sets; i++) {
+        const key = `${ex.id}_s${i}`;
+        if (!doneSets[key]) {
+          const cur = log.sets[key] ?? {};
+          setEntry(key, {
+            ...cur,
+            ...(reps ? { reps } : {}),
+            ...(weight && weighted ? { weight } : {}),
+          });
+          break;
+        }
+      }
+    };
+
     return (
       <div className="px-5 pb-8 fade-up" key={ex.id}>
         {/* Progress header */}
@@ -534,6 +581,28 @@ export default function SessionLogger({
         {/* Sets */}
         {!isInfoOnly && (
           <div className="mt-6 space-y-3">
+            {logVoice.supported && (
+              <div>
+                <button
+                  onClick={logVoice.recording ? logVoice.stop : logVoice.start}
+                  disabled={logVoice.busy}
+                  className={`display text-[11px] tracking-[0.08em] border px-3 py-1.5 cursor-pointer transition-colors ${
+                    logVoice.recording
+                      ? "border-stop text-stop"
+                      : "border-line-strong text-muted hover:text-accent hover:border-accent"
+                  }`}
+                >
+                  {logVoice.busy
+                    ? "Logging…"
+                    : logVoice.recording
+                      ? "◉ Stop — then it fills"
+                      : "◉ Talk to log a set"}
+                </button>
+                {logVoice.error && (
+                  <span className="text-[11px] text-stop ml-2">{logVoice.error}</span>
+                )}
+              </div>
+            )}
             {Array.from({ length: ex.sets }).map((_, i) => {
               const key = `${ex.id}_s${i}`;
               const entry = log.sets[key] ?? {};
