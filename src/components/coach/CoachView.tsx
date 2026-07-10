@@ -20,6 +20,8 @@ import {
 } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
 import ShareWeek from "@/components/ShareWeek";
+import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
+import { primeVoices, speak } from "@/lib/speech";
 
 type UiMessage = Pick<ChatMessage, "role" | "content">;
 
@@ -169,6 +171,15 @@ export default function CoachView() {
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Voice: speak into the coach (transcribe → input), and read the reply back
+  // when the question came in by voice.
+  const voiceReplyRef = useRef(false);
+  const voice = useVoiceRecorder((text) => {
+    voiceReplyRef.current = true;
+    setInput((i) => (i ? `${i} ${text}` : text));
+  });
+  useEffect(() => primeVoices(), []);
+
   const loadConversations = useCallback(() => {
     api<Conversation[]>("/api/conversations")
       .then(setConversations)
@@ -252,6 +263,12 @@ export default function CoachView() {
         setMessages([...base, { role: "assistant", content: current }]);
       }
       loadConversations();
+
+      // If she asked by voice, read the answer back.
+      if (voiceReplyRef.current) {
+        voiceReplyRef.current = false;
+        speak(assistantText);
+      }
 
       // Fire-and-forget: let the coach consolidate what's worth remembering
       const captureConv = newConvId ?? convId;
@@ -418,6 +435,16 @@ export default function CoachView() {
             placeholder="Message your coach…"
             className={`${inputClass} resize-none flex-1`}
           />
+          {voice.supported && !streaming && (
+            <Button
+              variant="secondary"
+              onClick={voice.recording ? voice.stop : voice.start}
+              disabled={voice.busy}
+              aria-label={voice.recording ? "Stop recording" : "Speak to coach"}
+            >
+              {voice.busy ? "…" : voice.recording ? "◉ Stop" : "Talk"}
+            </Button>
+          )}
           {streaming ? (
             <Button variant="secondary" onClick={stop}>
               Stop
@@ -428,6 +455,7 @@ export default function CoachView() {
             </Button>
           )}
         </div>
+        {voice.error && <div className="text-[11px] text-stop mt-1.5">{voice.error}</div>}
       </div>
     </div>
   );
