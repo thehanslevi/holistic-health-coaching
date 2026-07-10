@@ -19,7 +19,6 @@ import {
   todayISO,
 } from "@/lib/program";
 import { isRunLog, type Checkin, type HealthRow, type Readiness } from "@/lib/types";
-import { phaseWeek } from "@/lib/phase-format";
 import type { CycleState } from "@/lib/cycle";
 import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
 import { Button, Dots, inputClass } from "@/components/ui";
@@ -120,7 +119,7 @@ function PendingRunCard({ run }: { run: PendingRun }) {
 }
 
 export default function TodayView() {
-  const { logs, goTrain, setTab, activePhase } = useApp();
+  const { logs, goTrain, setTab } = useApp();
   const [checkin, setCheckin] = useState<Checkin | null | undefined>(undefined);
   const [brief, setBrief] = useState<string | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
@@ -258,11 +257,6 @@ export default function TodayView() {
           </span>
           <span className="text-accent text-[13px] leading-none">▦</span>
         </button>
-        <span className="label">
-          {activePhase
-            ? `Week ${phaseWeek(activePhase)} · Phase ${activePhase.phase_number}`
-            : "Phase 3"}
-        </span>
       </div>
 
       {/* Poster title */}

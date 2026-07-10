@@ -1,8 +1,52 @@
 // Voice output. Prefers a natural neural voice (server /api/tts → MP3, played
-// through the Web Audio API so it survives iOS's autoplay rules), and falls back
-// to the browser's built-in SpeechSynthesis when TTS isn't configured.
+// through an <audio> element so it survives iOS's ring/silent switch and
+// autoplay rules), and falls back to the browser's built-in SpeechSynthesis
+// when TTS isn't configured.
 
 import { getPasscode } from "@/lib/client";
+
+// A tiny silent clip used to "unlock" audio playback inside a user gesture on iOS.
+const SILENT =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+
+let audioEl: HTMLAudioElement | null = null;
+let unlocked = false;
+let neuralOk: boolean | null = null; // null = untried, false = no key/unsupported
+
+function getEl(): HTMLAudioElement | null {
+  if (typeof window === "undefined" || typeof Audio === "undefined") return null;
+  if (!audioEl) {
+    audioEl = new Audio();
+    audioEl.setAttribute("playsinline", "true");
+  }
+  return audioEl;
+}
+
+// Must run inside a user gesture (a tap) to unlock playback on iOS.
+function unlock() {
+  const el = getEl();
+  if (!el || unlocked) return;
+  try {
+    el.src = SILENT;
+    const p = el.play();
+    if (p && typeof p.then === "function") {
+      p.then(() => {
+        unlocked = true;
+      }).catch(() => {});
+    } else {
+      unlocked = true;
+    }
+  } catch {
+    /* will retry on next gesture */
+  }
+}
+
+export function primeVoices() {
+  unlock(); // unlocks when called from a gesture; harmless otherwise
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    window.speechSynthesis.getVoices();
+  }
+}
 
 export function speechSupported(): boolean {
   return (
@@ -10,48 +54,14 @@ export function speechSupported(): boolean {
   );
 }
 
-// ─── Neural voice (Web Audio) ──────────────────────────────────────────────────
-
-let audioCtx: AudioContext | null = null;
-let currentSource: AudioBufferSourceNode | null = null;
-let neuralOk: boolean | null = null; // null = untried, false = no key/unsupported
-
-function getCtx(): AudioContext | null {
-  if (typeof window === "undefined") return null;
-  const Ctor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Ctor) return null;
-  if (!audioCtx) audioCtx = new Ctor();
-  return audioCtx;
-}
-
-/** Call inside a user gesture to unlock audio on iOS (before the first speak). */
-export function primeVoices() {
-  const ctx = getCtx();
-  if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
-  // Also warm the built-in voice list for the fallback path.
-  if (typeof window !== "undefined" && "speechSynthesis" in window) {
-    window.speechSynthesis.getVoices();
-  }
-}
-
-function stopNeural() {
-  try {
-    currentSource?.stop();
-  } catch {
-    /* already stopped */
-  }
-  currentSource = null;
-}
-
 async function speakNeural(text: string, onEnd?: () => void): Promise<boolean> {
   if (neuralOk === false) return false;
-  const ctx = getCtx();
-  if (!ctx) {
+  const el = getEl();
+  if (!el) {
     neuralOk = false;
     return false;
   }
   try {
-    if (ctx.state === "suspended") await ctx.resume();
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: {
@@ -66,15 +76,14 @@ async function speakNeural(text: string, onEnd?: () => void): Promise<boolean> {
     }
     if (!res.ok) return false;
     neuralOk = true;
-    const buf = await res.arrayBuffer();
-    const audioBuf = await ctx.decodeAudioData(buf);
-    stopNeural();
-    const src = ctx.createBufferSource();
-    src.buffer = audioBuf;
-    src.connect(ctx.destination);
-    src.onended = () => onEnd?.();
-    src.start();
-    currentSource = src;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    el.src = url;
+    el.onended = () => {
+      URL.revokeObjectURL(url);
+      onEnd?.();
+    };
+    await el.play();
     return true;
   } catch {
     return false;
@@ -121,13 +130,20 @@ type SpeakOpts = { rate?: number; pitch?: number; onEnd?: () => void };
 export function speak(text: string, opts: SpeakOpts = {}) {
   if (!text.trim()) return;
   stopSpeaking();
+  unlock(); // synchronous, within the calling gesture
   void speakNeural(text, opts.onEnd).then((ok) => {
     if (!ok) speakBuiltin(text, opts);
   });
 }
 
 export function stopSpeaking() {
-  stopNeural();
+  if (audioEl) {
+    try {
+      audioEl.pause();
+    } catch {
+      /* ignore */
+    }
+  }
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
   }
