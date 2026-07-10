@@ -21,12 +21,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HRL",
+  title: "Volt",
   description: "Training, recovery, and coaching.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black",
-    title: "HRL",
+    title: "Volt",
   },
 };
 

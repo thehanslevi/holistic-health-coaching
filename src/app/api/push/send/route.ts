@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     // "Test" button in the opt-in control.
     if (req.nextUrl.searchParams.get("test") === "1") {
       const result = await sendPushToAll({
-        title: "HRL — morning coach on",
+        title: "Volt — morning coach on",
         body: "This is a test. Your brief and red-flag signals land here at 8 AM.",
         url: "/",
         tag: "test",
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
       parts.push(`Reminder: log next-morning scores for your ${r.dist || ""} mi run.`.replace("  ", " "));
     }
     const body = parts.join("\n\n").trim() ||
-      "Open HRL to check in and see today's plan.";
+      "Open Volt to check in and see today's plan.";
 
     const dow = WEEKDAYS[new Date().getDay()];
     const payload: PushPayload = {

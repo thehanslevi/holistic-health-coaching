@@ -94,7 +94,7 @@ function PasscodeGate({ onUnlock }: { onUnlock: (code: string) => void }) {
   return (
     <div className="min-h-dvh flex items-center justify-center px-6">
       <div className="w-full max-w-xs text-center fade-up">
-        <div className="display-i text-5xl text-ink">HRL</div>
+        <div className="display-i text-5xl text-ink">Volt</div>
         <div className="label mt-2 mb-8">Train · Recover · Coach</div>
         <input
           type="password"

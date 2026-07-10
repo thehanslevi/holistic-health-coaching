@@ -120,8 +120,8 @@ export default function PushOptIn() {
           </span>
         </div>
         <div className="text-[12.5px] text-muted mt-1.5 leading-relaxed">
-          Notifications are turned off for HRL. Enable them in iOS Settings →
-          Notifications → HRL, then reopen the app.
+          Notifications are turned off for Volt. Enable them in iOS Settings →
+          Notifications → Volt, then reopen the app.
         </div>
       </div>
     );

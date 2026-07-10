@@ -97,7 +97,7 @@ export async function buildWeeklyShareText(): Promise<{ text: string; week: stri
   const rangeLabel = `${new Date(week + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}–${weekEndD.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
 
   const parts: string[] = [];
-  parts.push(`HRL — WEEK OF ${rangeLabel.toUpperCase()}`);
+  parts.push(`VOLT — WEEK OF ${rangeLabel.toUpperCase()}`);
   parts.push(phaseLabel(phase));
   parts.push("");
   parts.push("── COACH'S WEEKLY REVIEW ──");
@@ -158,7 +158,7 @@ export async function buildWeeklyShareText(): Promise<{ text: string; week: stri
   }
 
   parts.push("");
-  parts.push("Sent from HRL · holistic-health-coaching.vercel.app");
+  parts.push("Sent from Volt · holistic-health-coaching.vercel.app");
 
   return { text: parts.join("\n"), week };
 }
