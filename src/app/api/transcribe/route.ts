@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     const upstream = new FormData();
     upstream.append("file", file, `audio.${ext}`);
     upstream.append("model_id", "scribe_v1");
+    upstream.append("tag_audio_events", "false"); // keep transcripts to spoken words only
 
     const res = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
       method: "POST",
