@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiRaw } from "@/lib/client";
 import {
+  computeConsistency,
   computeSignals,
+  cycleSignal,
   featuredLift,
   pendingRuns,
+  suggestReadiness,
   weekDayHits,
   type PendingRun,
 } from "@/lib/analytics";
@@ -26,24 +29,33 @@ import PushOptIn from "@/components/today/PushOptIn";
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
-const READINESS_META: Record<Readiness, { label: string; hint: string; cls: string; active: string }> = {
+const READINESS_META: Record<
+  Readiness,
+  { label: string; hint: string; cls: string; active: string; suggest: string; dot: string }
+> = {
   green: {
     label: "Green",
     hint: "push as planned",
     cls: "border-go/40 text-go",
     active: "bg-go text-bg border-go",
+    suggest: "border-go text-go bg-go/10",
+    dot: "bg-go",
   },
   yellow: {
     label: "Yellow",
     hint: "show up, lighter",
     cls: "border-hold/40 text-hold",
     active: "bg-hold text-bg border-hold",
+    suggest: "border-hold text-hold bg-hold/10",
+    dot: "bg-hold",
   },
   red: {
     label: "Red",
     hint: "recovery only",
     cls: "border-stop/40 text-stop",
     active: "bg-stop text-bg border-stop",
+    suggest: "border-stop text-stop bg-stop/10",
+    dot: "bg-stop",
   },
 };
 
@@ -193,9 +205,15 @@ export default function TodayView() {
   const hits = useMemo(() => weekDayHits(logs), [logs]);
   const weekCount = hits.filter(Boolean).length;
   const lift = useMemo(() => featuredLift(logs), [logs]);
+  const consistency = useMemo(() => computeConsistency(logs), [logs]);
 
-  // Proactive signals + pending run captures
-  const signals = useMemo(() => computeSignals(logs, health), [logs, health]);
+  // Proactive signals (+ a phase-aware cycle signal) + pending run captures
+  const signals = useMemo(() => {
+    const base = computeSignals(logs, health);
+    const cs = cycleSignal(cycle);
+    return cs ? [cs, ...base] : base;
+  }, [logs, health, cycle]);
+  const suggestion = useMemo(() => suggestReadiness(health, cycle), [health, cycle]);
   const pending = useMemo(() => pendingRuns(logs), [logs]);
   const fuelingDay = !isShabbat; // strength or run day
 
@@ -259,28 +277,50 @@ export default function TodayView() {
         </span>
       </div>
 
-      {/* Readiness check-in */}
-      <div className="mt-6 flex items-center gap-2">
-        <span className="label shrink-0 mr-1">Arriving</span>
-        {(Object.keys(READINESS_META) as Readiness[]).map((r) => {
-          const meta = READINESS_META[r];
-          const active = checkin?.readiness === r;
-          return (
-            <button
-              key={r}
-              onClick={() => submitReadiness(r)}
-              className={`display text-[12px] tracking-[0.1em] px-3 py-1.5 border cursor-pointer transition-colors ${
-                active ? meta.active : `${meta.cls} hover:bg-surface-2`
-              }`}
-            >
-              {meta.label}
-            </button>
-          );
-        })}
-        {checkin && (
-          <span className="text-[11px] text-faint ml-1">
-            {READINESS_META[checkin.readiness].hint}
-          </span>
+      {/* Readiness — coach read (data-informed) + your call */}
+      <div className="mt-6">
+        {!checkin && suggestion && (
+          <div className={`border p-3 mb-3 ${READINESS_META[suggestion.level].cls}`}>
+            <div className="label !text-[9px] !text-current">Coach read · this morning</div>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${READINESS_META[suggestion.level].dot}`} />
+              <span className="display text-[16px] text-ink">
+                Leaning {READINESS_META[suggestion.level].label}
+              </span>
+            </div>
+            <div className="text-[12px] text-muted mt-1 leading-snug">
+              {suggestion.reasons.join(" · ")}. {READINESS_META[suggestion.level].hint}.
+            </div>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <span className="label shrink-0 mr-1">Arriving</span>
+          {(Object.keys(READINESS_META) as Readiness[]).map((r) => {
+            const meta = READINESS_META[r];
+            const active = checkin?.readiness === r;
+            const suggested = !checkin && suggestion?.level === r;
+            return (
+              <button
+                key={r}
+                onClick={() => submitReadiness(r)}
+                className={`display text-[12px] tracking-[0.1em] px-3 py-1.5 border cursor-pointer transition-colors ${
+                  active ? meta.active : suggested ? meta.suggest : `${meta.cls} hover:bg-surface-2`
+                }`}
+              >
+                {meta.label}
+              </button>
+            );
+          })}
+          {checkin && (
+            <span className="text-[11px] text-faint ml-1">
+              {READINESS_META[checkin.readiness].hint}
+            </span>
+          )}
+        </div>
+        {!checkin && suggestion && (
+          <div className="text-[10px] text-faint mt-1.5">
+            Coach suggests {READINESS_META[suggestion.level].label} — tap to confirm or overrule.
+          </div>
         )}
       </div>
 
@@ -426,24 +466,47 @@ export default function TodayView() {
         );
       })()}
 
-      {/* Week strip */}
-      <div className="flex gap-1.5 mt-4">
-        {hits.map((hit, i) => (
-          <div key={i} className="flex-1">
-            <div
-              className={`h-[5px] ${
-                hit ? "bg-accent" : i === dayIdx ? "bg-surface-3" : "bg-surface-2"
-              }`}
-            />
-            <div
-              className={`label !text-[9px] text-center mt-1 ${
-                i === dayIdx ? "!text-accent" : ""
-              }`}
-            >
-              {DAY_LETTERS[i]}
+      {/* Consistency — showing up made visible (momentum, never guilt) */}
+      <div className="border border-line bg-surface p-3.5 mt-4">
+        <div className="flex items-baseline justify-between">
+          <span className="label">Consistency</span>
+          {consistency.bestStreak > 0 && (
+            <span className="label !text-[9px]">Best {consistency.bestStreak}</span>
+          )}
+        </div>
+        <div className="flex items-baseline gap-2 mt-1">
+          <span className="stat-num text-[32px] text-accent">{consistency.streak}</span>
+          <span className="display text-[12px] tracking-[0.08em] text-muted">
+            day{consistency.streak === 1 ? "" : "s"} strong
+          </span>
+          <span className="ml-auto display text-[13px] text-ink">
+            {consistency.thisWeek}
+            <span className="text-faint">/6 this wk</span>
+          </span>
+        </div>
+        <div className="flex gap-1.5 mt-3">
+          {hits.map((hit, i) => (
+            <div key={i} className="flex-1">
+              <div
+                className={`h-[5px] ${
+                  hit ? "bg-accent" : i === dayIdx ? "bg-surface-3" : "bg-surface-2"
+                }`}
+              />
+              <div
+                className={`label !text-[9px] text-center mt-1 ${
+                  i === dayIdx ? "!text-accent" : ""
+                }`}
+              >
+                {DAY_LETTERS[i]}
+              </div>
             </div>
+          ))}
+        </div>
+        {consistency.streak >= 3 && (
+          <div className="text-[11px] text-accent-dim italic mt-2.5">
+            Showing up is the lever — you&apos;re on it.
           </div>
-        ))}
+        )}
       </div>
 
       {/* Daily recovery check */}

@@ -228,7 +228,8 @@ export function weekDayHits(logs: LogRow[]): boolean[] {
 // ─── Proactive signals + pending captures ─────────────────────────────────────
 
 import { runTraffic } from "@/lib/program";
-import type { HealthRow } from "@/lib/types";
+import type { CycleState } from "@/lib/cycle";
+import type { HealthRow, Readiness } from "@/lib/types";
 
 export type PendingRun = { id: string; date: string; dist: string };
 
@@ -321,4 +322,130 @@ export function computeSignals(logs: LogRow[], health: HealthRow[]): Signal[] {
   }
 
   return out.slice(0, 4);
+}
+
+// ─── Data-informed readiness (proposes G/Y/R; the athlete keeps the final call) ─
+
+export type ReadinessSuggestion = { level: Readiness; reasons: string[] };
+
+/**
+ * Propose a readiness from overnight signals — HRV vs the recent baseline, last
+ * night's sleep, and cycle phase. This is a SUGGESTION only; the UI still lets
+ * her confirm or overrule. Returns null when there isn't enough data to weigh in.
+ */
+export function suggestReadiness(
+  health: HealthRow[],
+  cycle: CycleState | null,
+  today = new Date().toISOString().slice(0, 10),
+): ReadinessSuggestion | null {
+  const reasons: string[] = [];
+  let score = 0; // 0 = green; negative = more caution
+
+  // Last night's sleep (today's row, else the most recent).
+  const sleepRow = health.find((h) => h.date === today && h.sleep_hours != null)
+    ?? health.find((h) => h.sleep_hours != null);
+  if (sleepRow?.sleep_hours != null) {
+    const s = sleepRow.sleep_hours;
+    if (s < 5) { score -= 2; reasons.push(`sleep ${s}h`); }
+    else if (s < 6) { score -= 1; reasons.push(`sleep ${s}h`); }
+  }
+
+  // HRV today vs the trailing baseline (a meaningful drop = under-recovery).
+  const hrvs = health.filter((h) => h.hrv != null).map((h) => h.hrv as number);
+  if (hrvs.length >= 4) {
+    const todayHrv = hrvs[0];
+    const baseArr = hrvs.slice(1, 8);
+    const baseline = baseArr.reduce((a, b) => a + b, 0) / baseArr.length;
+    if (todayHrv < baseline * 0.75) {
+      score -= 2;
+      reasons.push(`HRV ${Math.round(todayHrv)} (down from ~${Math.round(baseline)} avg)`);
+    } else if (todayHrv < baseline * 0.85) {
+      score -= 1;
+      reasons.push(`HRV ${Math.round(todayHrv)} slightly down`);
+    }
+  }
+
+  // Cycle phase: menstrual + late-luteal lean toward a lighter day. Framed as a
+  // reason, not a verdict — energy, never restriction.
+  if (cycle) {
+    if (cycle.bleedingToday) { score -= 1; reasons.push("menstruating"); }
+    else if (cycle.phase === "luteal") { score -= 1; reasons.push(`late luteal (~day ${cycle.cycleDay})`); }
+  }
+
+  if (reasons.length === 0) return null; // nothing notable to say
+  const level: Readiness = score <= -3 ? "red" : score <= -1 ? "yellow" : "green";
+  return { level, reasons };
+}
+
+// ─── Cycle-aware Today signal ──────────────────────────────────────────────────
+
+/** A proactive phase flag for Today. Energy/performance framing only. */
+export function cycleSignal(cycle: CycleState | null): Signal | null {
+  if (!cycle || (!cycle.lastStart && !cycle.bleedingToday)) return null;
+  const day = cycle.cycleDay ? ` (~day ${cycle.cycleDay})` : "";
+  if (cycle.bleedingToday) {
+    return { tone: "accent", text: `Menstruating${day} — let readiness lead. Iron-rich food is a plus; no heroics required, no rest mandated.` };
+  }
+  switch (cycle.phase) {
+    case "ovulatory":
+      return { tone: "hold", text: `Ovulatory window${day} — estrogen loosens ligaments. Favor control over max load on runs and heavy lower work; protect the knee and ankle.` };
+    case "luteal":
+      return { tone: "accent", text: `Late luteal${day} — energy needs run higher now. Fuel a little more, especially around training. Under-fueling bites hardest this week.` };
+    case "follicular":
+      return { tone: "accent", text: `Follicular${day} — often the best window to push. If you feel strong, a good day to earn a bump.` };
+    default:
+      return null;
+  }
+}
+
+// ─── Consistency (showing up made visible; ES-safe — momentum, never guilt) ─────
+
+export type Consistency = {
+  streak: number; // consecutive "kept" days ending today/yesterday
+  bestStreak: number;
+  thisWeek: number; // days shown up this week
+  active: boolean; // is the streak currently live
+};
+
+/**
+ * A guilt-free consistency read. A day "counts" if anything was logged; a
+ * planned Shabbat rest day (Sunday) never breaks the streak. A gap simply ends
+ * the current streak quietly — there is no penalty, no scolding.
+ */
+export function computeConsistency(
+  logs: LogRow[],
+  today = new Date(),
+): Consistency {
+  const daysWithLog = new Set(logs.map((r) => r.logged_at));
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const kept = (d: Date) => daysWithLog.has(iso(d)) || d.getDay() === 0; // Sunday = rest
+
+  // Current streak: walk back from today (today not-yet-logged doesn't break it).
+  let streak = 0;
+  const cur = new Date(today);
+  if (!kept(cur)) cur.setDate(cur.getDate() - 1); // grace for today
+  while (kept(cur)) {
+    if (daysWithLog.has(iso(cur))) streak += 1; // rest days extend but don't add
+    cur.setDate(cur.getDate() - 1);
+  }
+
+  // Best streak over the last ~180 days.
+  let best = 0;
+  let run = 0;
+  const start = new Date(today);
+  start.setDate(start.getDate() - 180);
+  for (const d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+    if (kept(d)) {
+      if (daysWithLog.has(iso(d))) run += 1;
+    } else {
+      best = Math.max(best, run);
+      run = 0;
+    }
+  }
+  best = Math.max(best, run, streak);
+
+  const hits = weekDayHits(logs);
+  const thisWeek = hits.filter(Boolean).length;
+
+  return { streak, bestStreak: best, thisWeek, active: streak > 0 };
 }
