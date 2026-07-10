@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/client";
 import {
   loggedExercises,
@@ -10,6 +10,8 @@ import {
   weeklyVolume,
   xtrainMinutes,
 } from "@/lib/analytics";
+import { computeInsights } from "@/lib/insights";
+import type { HealthRow } from "@/lib/types";
 import { Button, Card, Dots, EmptyState, SectionLabel, inputClass } from "@/components/ui";
 import { BarChart, LineChart } from "@/components/progress/charts";
 import { useApp } from "@/components/AppShell";
@@ -53,6 +55,12 @@ function WeekReview() {
 export default function ProgressView() {
   const { logs } = useApp();
 
+  const [health, setHealth] = useState<HealthRow[]>([]);
+  useEffect(() => {
+    api<HealthRow[]>("/api/health").then(setHealth).catch(() => {});
+  }, []);
+  const insights = useMemo(() => computeInsights(logs, health), [logs, health]);
+
   const exercises = useMemo(() => loggedExercises(logs), [logs]);
   const [exerciseId, setExerciseId] = useState<string>("");
   const activeExercise = exerciseId || exercises[0]?.id || "";
@@ -77,6 +85,29 @@ export default function ProgressView() {
           Derived from everything you log — no extra tracking.
         </div>
       </div>
+
+      {insights.length > 0 && (
+        <div className="mb-5">
+          <SectionLabel>What your data is saying</SectionLabel>
+          <div className="space-y-2">
+            {insights.map((ins, i) => (
+              <div
+                key={i}
+                className={`border-l-[3px] pl-3.5 py-1.5 ${
+                  ins.tone === "watch"
+                    ? "border-hold"
+                    : ins.tone === "good"
+                      ? "border-go"
+                      : "border-accent"
+                }`}
+              >
+                <div className="display text-[13px] tracking-[0.04em] text-ink">{ins.title}</div>
+                <div className="text-[12.5px] text-muted mt-1 leading-snug">{ins.text}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {!nothingYet && <WeekReview />}
 
