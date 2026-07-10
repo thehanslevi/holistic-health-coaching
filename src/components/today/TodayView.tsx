@@ -21,6 +21,7 @@ import {
 import { isRunLog, type Checkin, type HealthRow, type Readiness } from "@/lib/types";
 import { phaseWeek } from "@/lib/phase-format";
 import type { CycleState } from "@/lib/cycle";
+import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
 import { Button, Dots, inputClass } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
 import CalendarOverlay from "@/components/today/CalendarOverlay";
@@ -197,6 +198,20 @@ export default function TodayView() {
   }, []);
   const showCycle = cycle && (cycle.lastStart || cycle.bleedingToday);
 
+  // Voice: read the morning brief aloud (built-in speech)
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => primeVoices(), []);
+  const toggleBriefAudio = () => {
+    if (speaking) {
+      stopSpeaking();
+      setSpeaking(false);
+      return;
+    }
+    if (!brief) return;
+    setSpeaking(true);
+    speak(brief, { rate: 0.98, onEnd: () => setSpeaking(false) });
+  };
+
   // Stats
   const lastRun = useMemo(() => logs.find(isRunLog), [logs]);
   const lastRunTraffic = lastRun
@@ -365,7 +380,18 @@ export default function TodayView() {
 
       {/* Coach brief */}
       <div className="mt-5 border-l-[3px] border-accent pl-3.5 py-0.5">
-        <div className="label mb-1.5">Coach · this morning</div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="label">Coach · this morning</span>
+          {brief && speechSupported() && (
+            <button
+              onClick={toggleBriefAudio}
+              className="display text-[10px] tracking-[0.1em] text-muted hover:text-accent transition-colors cursor-pointer inline-flex items-center gap-1"
+              aria-label={speaking ? "Stop reading" : "Read brief aloud"}
+            >
+              {speaking ? "◼ Stop" : "▶ Listen"}
+            </button>
+          )}
+        </div>
         {briefLoading && !brief ? (
           <Dots />
         ) : brief ? (

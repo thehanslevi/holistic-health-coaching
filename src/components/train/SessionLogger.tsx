@@ -15,6 +15,7 @@ import {
 import type { LogRow, SessionLogData, SetEntry } from "@/lib/types";
 import { Button, Delta, Field, SectionLabel, inputClass } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
+import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
 
 const REST_SECONDS = 90;
 
@@ -26,7 +27,15 @@ type Stage =
 
 // ─── Rest timer (starts each time a set is completed) ─────────────────────────
 
-function RestTimer({ endsAt, onDismiss }: { endsAt: number; onDismiss: () => void }) {
+function RestTimer({
+  endsAt,
+  onDismiss,
+  voice,
+}: {
+  endsAt: number;
+  onDismiss: () => void;
+  voice?: boolean;
+}) {
   const [left, setLeft] = useState(() => Math.ceil((endsAt - Date.now()) / 1000));
 
   useEffect(() => {
@@ -35,11 +44,12 @@ function RestTimer({ endsAt, onDismiss }: { endsAt: number; onDismiss: () => voi
       setLeft(remaining);
       if (remaining <= 0) {
         clearInterval(t);
+        if (voice) speak("Rest's up. Next set.");
         onDismiss();
       }
     }, 250);
     return () => clearInterval(t);
-  }, [endsAt, onDismiss]);
+  }, [endsAt, onDismiss, voice]);
 
   if (left <= 0) return null;
   const mm = Math.floor(left / 60);
@@ -203,7 +213,7 @@ export default function SessionLogger({
   onClose: () => void;
 }) {
   const session = SESSIONS[sessionKey];
-  const { logs, addLog, askCoach } = useApp();
+  const { logs, addLog, askCoach, overrides } = useApp();
 
   const prev = useMemo(() => lastSessionLog(logs, sessionKey), [logs, sessionKey]);
 
@@ -228,6 +238,34 @@ export default function SessionLogger({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const startedAtRef = useRef<number | null>(null);
+
+  // Voice cues (built-in speech), remembered across sessions.
+  const [voiceOn, setVoiceOn] = useState(false);
+  useEffect(() => {
+    setVoiceOn(localStorage.getItem("volt_voice_cues") === "1");
+    primeVoices();
+  }, []);
+  const toggleVoice = () =>
+    setVoiceOn((v) => {
+      const next = !v;
+      localStorage.setItem("volt_voice_cues", next ? "1" : "0");
+      if (!next) stopSpeaking();
+      return next;
+    });
+
+  // Announce each exercise as you reach it.
+  useEffect(() => {
+    if (!voiceOn || stage.name !== "exercise") return;
+    const ex = session.exercises[stage.idx];
+    if (!ex) return;
+    if (ex.id === "g1_note") {
+      speak(ex.name);
+      return;
+    }
+    const target = overrides[ex.id]?.target ?? ex.target;
+    speak(`${ex.name}. ${ex.sets} sets of ${ex.reps}. Target ${target}.`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, voiceOn]);
 
   const setField = <K extends keyof SessionLogData>(field: K, val: SessionLogData[K]) =>
     setLog((l) => ({ ...l, [field]: val }));
@@ -432,10 +470,25 @@ export default function SessionLogger({
           <button onClick={onClose} className="label hover:text-muted cursor-pointer">
             ← Exit
           </button>
-          <span className="stat-num text-[15px] text-muted">
-            {idx + 1}
-            <span className="text-faint">/{session.exercises.length}</span>
-          </span>
+          <div className="flex items-center gap-3">
+            {speechSupported() && (
+              <button
+                onClick={toggleVoice}
+                aria-label={voiceOn ? "Turn off voice cues" : "Turn on voice cues"}
+                className={`display text-[11px] tracking-[0.08em] border px-2 py-1 cursor-pointer transition-colors ${
+                  voiceOn
+                    ? "border-accent text-accent"
+                    : "border-line-strong text-faint hover:text-muted"
+                }`}
+              >
+                {voiceOn ? "◉ Voice" : "○ Voice"}
+              </button>
+            )}
+            <span className="stat-num text-[15px] text-muted">
+              {idx + 1}
+              <span className="text-faint">/{session.exercises.length}</span>
+            </span>
+          </div>
         </div>
         <div className="flex gap-1 mt-3">
           {session.exercises.map((e, i) => (
@@ -550,7 +603,9 @@ export default function SessionLogger({
           </Button>
         </div>
 
-        {restEndsAt && <RestTimer endsAt={restEndsAt} onDismiss={() => setRestEndsAt(null)} />}
+        {restEndsAt && (
+          <RestTimer endsAt={restEndsAt} onDismiss={() => setRestEndsAt(null)} voice={voiceOn} />
+        )}
       </div>
     );
   }
