@@ -1,8 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { buildCoachAnalysis } from "@/lib/coach-analysis";
 import { buildCoachContext } from "@/lib/coach-context";
 import { WEEKLY_SCHEDULE } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
 import { SYSTEM_PROMPT } from "@/lib/system-prompt";
+import type { HealthRow, LogRow } from "@/lib/types";
 
 const client = new Anthropic();
 
@@ -26,7 +28,19 @@ export async function getOrCreateDailyBrief(): Promise<{
     return { content: briefRes.data.content, cached: true };
   }
 
-  const context = await buildCoachContext();
+  const trendSince = new Date();
+  trendSince.setDate(trendSince.getDate() - 28);
+  const [context, trendRes, healthRes] = await Promise.all([
+    buildCoachContext(),
+    db
+      .from("hrl_logs")
+      .select("*")
+      .gte("logged_at", trendSince.toISOString().slice(0, 10))
+      .order("logged_at", { ascending: false })
+      .limit(80),
+    db.from("hrl_health").select("*").order("date", { ascending: false }).limit(21),
+  ]);
+  const analysis = buildCoachAnalysis((trendRes.data ?? []) as LogRow[], (healthRes.data ?? []) as HealthRow[]);
   const dayIdx = (new Date().getDay() + 6) % 7;
   const schedule = WEEKLY_SCHEDULE[dayIdx];
 
@@ -35,14 +49,14 @@ export async function getOrCreateDailyBrief(): Promise<{
     max_tokens: 300,
     system: [
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-      { type: "text", text: context.block },
+      { type: "text", text: `${context.block}\n\n${analysis}` },
     ],
     messages: [
       {
         role: "user",
         content: `Write my morning brief for today. Today's scheduled slot: "${schedule.label}". My readiness check-in today: ${readiness ?? "not recorded yet"}.
 
-Rules: 1 to 2 short sentences. Plain text only, no headers, no lists, no preamble. Talk like a real coach standing next to me. If there is concrete recent training in the context, mention one real thing from it (a weight, a run, how a joint felt). If there is little or no recent training, DO NOT mention that and DO NOT refer to logs, data, windows, or a "blank slate" in any way at all. Just give me one useful, concrete line for today. If readiness is yellow or red, lead with what to change. If it is Shabbat, one plain line about resting. Obey the voice and banned-word rules in your instructions: no metaphors, no "signal / rhythm / load / lever", no motivational-poster phrasing.`,
+Rules: 1 to 2 short sentences, the single most useful thing for me today. Use the computed analysis to say something real and specific: a call for today's session, a heads-up tied to a pattern or mismatch, or the one thing to prioritize or protect. Not a generic line, and not a recap of numbers I already know. If there is little or no recent training, DO NOT mention that or refer to logs, data, or a "blank slate" in any way; just give me one concrete, useful line for today. If readiness is yellow or red, lead with what to change. If it is Shabbat, one plain line about resting. Plain text only, no preamble. Obey the voice and banned-word rules in your instructions.`,
       },
     ],
   });

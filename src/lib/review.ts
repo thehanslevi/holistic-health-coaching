@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { buildCoachAnalysis } from "@/lib/coach-analysis";
 import { fetchMemoryNotes, memoryBlock } from "@/lib/coach-context";
 import { formatLogAsText } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { SYSTEM_PROMPT } from "@/lib/system-prompt";
-import type { LogRow } from "@/lib/types";
+import type { HealthRow, LogRow } from "@/lib/types";
 
 const client = new Anthropic();
 
@@ -33,14 +34,28 @@ export async function getOrCreateWeeklyReview(
 
   const weekEnd = new Date(week + "T00:00:00");
   weekEnd.setDate(weekEnd.getDate() + 6);
-  const { data: logRows, error } = await db
-    .from("hrl_logs")
-    .select("*")
-    .gte("logged_at", week)
-    .lte("logged_at", weekEnd.toISOString().slice(0, 10))
-    .order("logged_at", { ascending: true });
-  if (error) throw new Error(error.message);
-  const logs = (logRows ?? []) as LogRow[];
+  // Trends need history beyond the week; pull ~5 weeks for analysis + health.
+  const trendSince = new Date(week + "T00:00:00");
+  trendSince.setDate(trendSince.getDate() - 28);
+  const [weekRes, trendRes, healthRes] = await Promise.all([
+    db
+      .from("hrl_logs")
+      .select("*")
+      .gte("logged_at", week)
+      .lte("logged_at", weekEnd.toISOString().slice(0, 10))
+      .order("logged_at", { ascending: true }),
+    db
+      .from("hrl_logs")
+      .select("*")
+      .gte("logged_at", trendSince.toISOString().slice(0, 10))
+      .order("logged_at", { ascending: false })
+      .limit(80),
+    db.from("hrl_health").select("*").order("date", { ascending: false }).limit(21),
+  ]);
+  if (weekRes.error) throw new Error(weekRes.error.message);
+  const logs = (weekRes.data ?? []) as LogRow[];
+  const trendLogs = (trendRes.data ?? []) as LogRow[];
+  const health = (healthRes.data ?? []) as HealthRow[];
 
   if (logs.length === 0) {
     return {
@@ -51,20 +66,32 @@ export async function getOrCreateWeeklyReview(
     };
   }
 
-  const logsText = logs.map((l) => formatLogAsText(l)).join("\n\n");
+  const analysis = buildCoachAnalysis(trendLogs, health);
+  const weekLogsText = logs.map((l) => formatLogAsText(l)).join("\n\n");
   const mem = memoryBlock(await fetchMemoryNotes(db));
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 700,
+    max_tokens: 600,
     system: [
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-      { type: "text", text: `${mem}WEEK UNDER REVIEW (Mon ${week} onward):\n\n${logsText}` },
+      {
+        type: "text",
+        text: `${mem}${analysis}\n\n--- THIS WEEK'S SESSIONS (for reference only, do not recap) ---\n${weekLogsText}`,
+      },
     ],
     messages: [
       {
         role: "user",
-        content: `Write my weekly review. Structure: one short paragraph on what the week proved (reference concrete numbers), one on joint signals (knee and ankle against the traffic light), one on what next week should target. Plain prose, no headers, no lists, no preamble. Under 180 words.`,
+        content: `Write my weekly review as my coach.
+
+This is analysis, not a recap. Do NOT list my numbers back to me. I know what I lifted. Use the computed analysis above.
+
+1. Lead with the ONE or TWO things that actually matter that I might not see myself: a pattern, a mismatch, a risk, or something working and why it's working. If there's a mismatch flag, that is almost certainly your lead.
+2. Then a short, specific, prioritized plan for next week with the reasoning: what to push, what to hold, what to protect, and why.
+3. Sound like a specialist, not a generalist. Ground it in real methodology (concurrent-training high-low, tendon loading, muscle protection on the medication, autoregulation, double progression) without lecturing.
+
+Plain prose, no headers, no lists, no preamble. 120 to 180 words. Obey the voice and banned-word rules in your instructions.`,
       },
     ],
   });
