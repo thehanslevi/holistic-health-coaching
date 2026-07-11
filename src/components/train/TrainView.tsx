@@ -17,6 +17,7 @@ import XtrainLogger from "@/components/train/XtrainLogger";
 import HistoryList from "@/components/train/HistoryList";
 import ProgressionReview from "@/components/train/ProgressionReview";
 import ProgramView from "@/components/train/ProgramView";
+import WeekBalance from "@/components/train/WeekBalance";
 import { useApp } from "@/components/AppShell";
 
 type Screen =
@@ -158,6 +159,8 @@ export default function TrainView() {
               <span className="text-accent text-lg">→</span>
             </div>
           </Card>
+
+          <WeekBalance />
 
           <SectionLabel>This week</SectionLabel>
           <Card className="p-1.5">

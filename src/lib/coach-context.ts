@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildCoachAnalysis } from "@/lib/coach-analysis";
 import { cycleContextLine, deriveCycleState, type CycleDay } from "@/lib/cycle";
 import { formatLogAsText } from "@/lib/format";
 import { runTraffic } from "@/lib/program";
@@ -7,6 +8,7 @@ import {
   isRunLog,
   type Checkin,
   type CoachContextSummary,
+  type HealthRow,
   type LogRow,
 } from "@/lib/types";
 
@@ -48,21 +50,29 @@ export async function buildCoachContext(): Promise<{
   const db = supabase();
 
   const cycleSince = daysAgoISO(180);
-  const [logsRes, checkinRes, memory, healthRes, ovrRes, recoveryRes, cycleRes] = await Promise.all([
-    db
-      .from("hrl_logs")
-      .select("*")
-      .gte("logged_at", since)
-      .order("logged_at", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(40),
-    db.from("hrl_checkins").select("*").order("date", { ascending: false }).limit(1),
-    fetchMemoryNotes(db),
-    db.from("hrl_health").select("*").order("date", { ascending: false }).limit(7),
-    db.from("hrl_program_overrides").select("exercise_id, target, note"),
-    db.from("hrl_recovery").select("*").order("date", { ascending: false }).limit(1),
-    db.from("hrl_cycle").select("date, is_period, flow").gte("date", cycleSince).order("date", { ascending: true }),
-  ]);
+  const trendSince = daysAgoISO(28);
+  const [logsRes, checkinRes, memory, healthRes, ovrRes, recoveryRes, cycleRes, trendRes] =
+    await Promise.all([
+      db
+        .from("hrl_logs")
+        .select("*")
+        .gte("logged_at", since)
+        .order("logged_at", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(40),
+      db.from("hrl_checkins").select("*").order("date", { ascending: false }).limit(1),
+      fetchMemoryNotes(db),
+      db.from("hrl_health").select("*").order("date", { ascending: false }).limit(14),
+      db.from("hrl_program_overrides").select("exercise_id, target, note"),
+      db.from("hrl_recovery").select("*").order("date", { ascending: false }).limit(1),
+      db.from("hrl_cycle").select("date, is_period, flow").gte("date", cycleSince).order("date", { ascending: true }),
+      db
+        .from("hrl_logs")
+        .select("*")
+        .gte("logged_at", trendSince)
+        .order("logged_at", { ascending: false })
+        .limit(80),
+    ]);
   if (logsRes.error) throw new Error(logsRes.error.message);
 
   const logs = (logsRes.data ?? []) as LogRow[];
@@ -166,8 +176,13 @@ export async function buildCoachContext(): Promise<{
   }
 
   const mem = memoryBlock(memory);
+  const analysis = buildCoachAnalysis(
+    (trendRes.data ?? []) as LogRow[],
+    (healthRes.data ?? []) as HealthRow[],
+  );
+  const blockBody = `${lines.join("\n")}\n\n${analysis}`;
   return {
-    block: mem ? `${mem}\n${lines.join("\n")}` : lines.join("\n"),
+    block: mem ? `${mem}\n${blockBody}` : blockBody,
     summary: {
       sessionCount,
       runStatus: traffic?.light ?? null,

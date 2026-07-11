@@ -1,10 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { buildCoachAnalysis } from "@/lib/coach-analysis";
 import { buildCoachContext } from "@/lib/coach-context";
 import { WEEKLY_SCHEDULE } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
 import { SYSTEM_PROMPT } from "@/lib/system-prompt";
-import type { HealthRow, LogRow } from "@/lib/types";
 
 const client = new Anthropic();
 
@@ -28,19 +26,7 @@ export async function getOrCreateDailyBrief(): Promise<{
     return { content: briefRes.data.content, cached: true };
   }
 
-  const trendSince = new Date();
-  trendSince.setDate(trendSince.getDate() - 28);
-  const [context, trendRes, healthRes] = await Promise.all([
-    buildCoachContext(),
-    db
-      .from("hrl_logs")
-      .select("*")
-      .gte("logged_at", trendSince.toISOString().slice(0, 10))
-      .order("logged_at", { ascending: false })
-      .limit(80),
-    db.from("hrl_health").select("*").order("date", { ascending: false }).limit(21),
-  ]);
-  const analysis = buildCoachAnalysis((trendRes.data ?? []) as LogRow[], (healthRes.data ?? []) as HealthRow[]);
+  const context = await buildCoachContext(); // block already includes the computed analysis
   const dayIdx = (new Date().getDay() + 6) % 7;
   const schedule = WEEKLY_SCHEDULE[dayIdx];
 
@@ -49,7 +35,7 @@ export async function getOrCreateDailyBrief(): Promise<{
     max_tokens: 300,
     system: [
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-      { type: "text", text: `${context.block}\n\n${analysis}` },
+      { type: "text", text: context.block },
     ],
     messages: [
       {
