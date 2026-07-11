@@ -335,7 +335,6 @@ export type ReadinessSuggestion = { level: Readiness; reasons: string[] };
  */
 export function suggestReadiness(
   health: HealthRow[],
-  cycle: CycleState | null,
   today = new Date().toISOString().slice(0, 10),
 ): ReadinessSuggestion | null {
   const reasons: string[] = [];
@@ -365,37 +364,51 @@ export function suggestReadiness(
     }
   }
 
-  // Cycle phase: menstrual + late-luteal lean toward a lighter day. Framed as a
-  // reason, not a verdict — energy, never restriction.
-  if (cycle) {
-    if (cycle.bleedingToday) { score -= 1; reasons.push("menstruating"); }
-    else if (cycle.phase === "luteal") { score -= 1; reasons.push(`late luteal (~day ${cycle.cycleDay})`); }
-  }
+  // Readiness is driven by objective recovery (sleep, HRV) and her own check-in,
+  // not by cycle phase — phase periodization has small effects and her cycle is
+  // irregular. A tough bleeding day shows up in sleep/HRV or in how she rates it.
 
   if (reasons.length === 0) return null; // nothing notable to say
   const level: Readiness = score <= -3 ? "red" : score <= -1 ? "yellow" : "green";
   return { level, reasons };
 }
 
+/**
+ * How to adjust today's session for readiness. Rule-based (no model call) so the
+ * guided logger can show it instantly. Green returns null — full session.
+ */
+export function sessionAdjustment(
+  readiness: Readiness | null | undefined,
+): { tone: "hold" | "stop"; title: string; note: string } | null {
+  if (readiness === "yellow")
+    return {
+      tone: "hold",
+      title: "Yellow day — trim it",
+      note: "Keep the main lifts, cut one set off each, and stop about two reps short. Skip the isolation work at the end. No PRs today.",
+    };
+  if (readiness === "red")
+    return {
+      tone: "stop",
+      title: "Red day — skip the loading",
+      note: "Don't grind through this. Bike, pool, or walk, do your PT and mobility, and come back to it tomorrow.",
+    };
+  return null;
+}
+
 // ─── Cycle-aware Today signal ──────────────────────────────────────────────────
 
-/** A proactive phase flag for Today. Energy/performance framing only. */
+/**
+ * A gentle bleeding-day note for Today. Cycle-phase periodization has small
+ * effects (2025 evidence) and her cycle is irregular, so we don't prescribe by
+ * phase — only a light, no-pressure note while she's actually menstruating.
+ */
 export function cycleSignal(cycle: CycleState | null): Signal | null {
-  if (!cycle || (!cycle.lastStart && !cycle.bleedingToday)) return null;
-  const day = cycle.cycleDay ? ` (~day ${cycle.cycleDay})` : "";
-  if (cycle.bleedingToday) {
-    return { tone: "accent", text: `Menstruating${day} — let readiness lead. Iron-rich food is a plus; no heroics required, no rest mandated.` };
-  }
-  switch (cycle.phase) {
-    case "ovulatory":
-      return { tone: "hold", text: `Ovulatory window${day} — estrogen loosens ligaments. Favor control over max load on runs and heavy lower work; protect the knee and ankle.` };
-    case "luteal":
-      return { tone: "accent", text: `Late luteal${day} — energy needs run higher now. Fuel a little more, especially around training. Under-fueling bites hardest this week.` };
-    case "follicular":
-      return { tone: "accent", text: `Follicular${day} — often the best window to push. If you feel strong, a good day to earn a bump.` };
-    default:
-      return null;
-  }
+  if (!cycle?.bleedingToday) return null;
+  const day = cycle.cycleDay ? ` (day ${cycle.cycleDay})` : "";
+  return {
+    tone: "accent",
+    text: `Period${day}. If you're crampy or wiped, go lighter today, no guilt. If you feel fine, train as normal. Iron-rich food is a plus.`,
+  };
 }
 
 // ─── Consistency (showing up made visible; ES-safe — momentum, never guilt) ─────

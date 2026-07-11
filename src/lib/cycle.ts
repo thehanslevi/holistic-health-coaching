@@ -44,13 +44,6 @@ function periodStarts(days: CycleDay[]): string[] {
   return starts;
 }
 
-const PHASE_LABEL: Record<CyclePhase, string> = {
-  menstrual: "Menstrual",
-  follicular: "Follicular",
-  ovulatory: "Ovulatory",
-  luteal: "Luteal",
-  unknown: "Cycle",
-};
 
 export function deriveCycleState(
   days: CycleDay[],
@@ -92,7 +85,7 @@ export function deriveCycleState(
       approximate: false,
       avgLength,
       bleedingToday,
-      label: `Menstrual · day ${cycleDay}`,
+      label: `Period · day ${cycleDay}`,
     };
   }
 
@@ -106,26 +99,20 @@ export function deriveCycleState(
   else phase = "unknown"; // overdue — past the expected length
 
   const approximate = true; // irregular cycle: never assert an estimated phase
+  // De-emphasize the (weak) phase name in the UI; show where she is in the cycle.
   const label =
-    phase === "unknown"
-      ? `~day ${cycleDay} · period may be near`
-      : `${PHASE_LABEL[phase]} · ~day ${cycleDay}`;
+    phase === "unknown" ? `Cycle · ~day ${cycleDay} · period may be near` : `Cycle · ~day ${cycleDay}`;
 
   return { lastStart, cycleDay, phase, approximate, avgLength, bleedingToday, label };
 }
 
-/** One-line coach-facing summary of the current cycle state. */
+/**
+ * One-line coach-facing cycle summary — only on a bleeding day. Between periods
+ * the phase estimate is a weak signal on an irregular cycle (2025 evidence:
+ * phase periodization has small effects), so we don't feed it to the coach and
+ * invite over-use; sleep, food, and consistency matter far more.
+ */
 export function cycleContextLine(s: CycleState): string | null {
-  if (!s.lastStart && !s.bleedingToday) return null;
-  const parts: string[] = [];
-  if (s.bleedingToday) {
-    parts.push(`Menstruating now (cycle day ${s.cycleDay ?? "?"})`);
-  } else {
-    parts.push(
-      `Estimated ${s.phase} phase, ~cycle day ${s.cycleDay} (APPROXIMATE — cycle is irregular)`,
-    );
-  }
-  if (s.lastStart) parts.push(`last period started ${s.lastStart}`);
-  if (s.avgLength) parts.push(`recent avg cycle ~${s.avgLength} days`);
-  return parts.join("; ") + ".";
+  if (!s.bleedingToday) return null;
+  return `Menstruating today (period day ${s.cycleDay ?? "?"}). Honor how she feels: lighter is fine if she's low, otherwise train as normal. Do not train around cycle phase.`;
 }

@@ -227,7 +227,7 @@ export default function TodayView() {
     const cs = cycleSignal(cycle);
     return cs ? [cs, ...base] : base;
   }, [logs, health, cycle]);
-  const suggestion = useMemo(() => suggestReadiness(health, cycle), [health, cycle]);
+  const suggestion = useMemo(() => suggestReadiness(health), [health]);
   const pending = useMemo(() => pendingRuns(logs), [logs]);
   const fuelingDay = !isShabbat; // strength or run day
 

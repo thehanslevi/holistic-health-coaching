@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/client";
-import { exerciseMax, lastSessionLog, sessionVolume } from "@/lib/analytics";
+import { exerciseMax, lastSessionLog, sessionAdjustment, sessionVolume } from "@/lib/analytics";
 import { formatLogAsText } from "@/lib/format";
 import {
   EXERCISE_THERAPY,
@@ -12,7 +12,7 @@ import {
   type Exercise,
   type SessionKey,
 } from "@/lib/program";
-import type { LogRow, SessionLogData, SetEntry } from "@/lib/types";
+import type { Checkin, LogRow, Readiness, SessionLogData, SetEntry } from "@/lib/types";
 import { Button, Delta, Field, SectionLabel, inputClass } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
 import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
@@ -264,6 +264,16 @@ export default function SessionLogger({
   const [error, setError] = useState<string | null>(null);
   const startedAtRef = useRef<number | null>(null);
 
+  // Today's readiness → autoregulation note in the intro.
+  const [readiness, setReadiness] = useState<Readiness | null>(null);
+  useEffect(() => {
+    const today = todayISO();
+    api<Checkin[]>(`/api/checkins?since=${today}`)
+      .then((rows) => setReadiness(rows.find((r) => r.date === today)?.readiness ?? null))
+      .catch(() => {});
+  }, []);
+  const adjust = sessionAdjustment(readiness);
+
   // Voice cues (built-in speech), remembered across sessions.
   const [voiceOn, setVoiceOn] = useState(false);
   useEffect(() => {
@@ -391,6 +401,23 @@ export default function SessionLogger({
         {prev && (
           <div className="label mt-2">
             Last time: {prev.logged_at} — your numbers are pre-loaded
+          </div>
+        )}
+
+        {adjust && (
+          <div
+            className={`mt-5 border-l-[3px] pl-3.5 py-2 ${
+              adjust.tone === "stop" ? "border-stop" : "border-hold"
+            }`}
+          >
+            <div
+              className={`label !text-[9px] ${
+                adjust.tone === "stop" ? "!text-stop" : "!text-hold"
+              }`}
+            >
+              {adjust.title}
+            </div>
+            <div className="text-[13px] text-ink leading-snug mt-1">{adjust.note}</div>
           </div>
         )}
 
