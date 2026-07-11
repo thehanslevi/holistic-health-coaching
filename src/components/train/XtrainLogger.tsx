@@ -88,7 +88,7 @@ export default function XtrainLogger({
           className={`${inputClass} num`} />
       </Field>
       <Field label="Duration (min)" className="mb-3">
-        <input type="number" inputMode="numeric" placeholder="e.g. 30" value={data.duration}
+        <input type="number" inputMode="decimal" step="any" placeholder="e.g. 30" value={data.duration}
           onChange={(e) => set("duration", e.target.value)} className={`${inputClass} num`} />
       </Field>
       <Field label="Intensity / how it felt (optional)" className="mb-3">

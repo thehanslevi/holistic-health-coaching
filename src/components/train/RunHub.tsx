@@ -195,8 +195,9 @@ export default function RunHub({
             <Field key={f.id} label={f.label} className="mb-3">
               <input
                 type={f.type}
-                inputMode={f.type === "number" ? "numeric" : undefined}
+                inputMode={f.type === "number" ? "decimal" : undefined}
                 placeholder={f.placeholder}
+                step={f.type === "number" ? "any" : undefined}
                 value={fields[f.id] as string}
                 onChange={(e) => setFields((prev) => ({ ...prev, [f.id]: e.target.value }))}
                 className={`${inputClass} num`}
