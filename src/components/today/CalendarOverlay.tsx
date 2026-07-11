@@ -226,7 +226,7 @@ function DayDetail({
       const s = SESSIONS[row.data.sessionKey as SessionKey];
       return {
         title: s?.label ?? row.data.sessionKey,
-        sub: `knee ${row.data.kneeStart}→${row.data.kneeEnd}${row.data.durationMin ? ` · ${row.data.durationMin} min` : ""}`,
+        sub: `knee ${row.data.kneeStart}→${row.data.kneeEnd}`,
       };
     }
     if (isRunLog(row)) {

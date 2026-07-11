@@ -262,7 +262,6 @@ export default function SessionLogger({
   const [showNote, setShowNote] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const startedAtRef = useRef<number | null>(null);
 
   // Today's readiness → autoregulation note in the intro.
   const [readiness, setReadiness] = useState<Readiness | null>(null);
@@ -325,7 +324,6 @@ export default function SessionLogger({
       }
       setLog((l) => ({ ...l, sets: prefill }));
     }
-    startedAtRef.current = Date.now();
     setStage({ name: "exercise", idx: 0 });
     setShowNote(false);
   };
@@ -355,10 +353,7 @@ export default function SessionLogger({
       if (doneSets[key] && (entry.reps || entry.weight || entry.duration))
         performedSets[key] = entry;
     }
-    const durationMin = startedAtRef.current
-      ? Math.max(1, Math.round((Date.now() - startedAtRef.current) / 60000))
-      : undefined;
-    const payload: SessionLogData = { ...log, sets: performedSets, durationMin };
+    const payload: SessionLogData = { ...log, sets: performedSets };
     try {
       const row = await api<LogRow>("/api/logs", {
         method: "POST",
@@ -812,7 +807,7 @@ export default function SessionLogger({
         done.
       </h2>
 
-      <div className="grid grid-cols-3 gap-px bg-line border border-line mt-6">
+      <div className="grid grid-cols-2 gap-px bg-line border border-line mt-6">
         <div className="bg-surface p-3">
           <div className="stat-num text-[24px] text-ink">
             {vol >= 1000 ? `${Math.round(vol / 100) / 10}K` : vol}
@@ -829,10 +824,6 @@ export default function SessionLogger({
             {prs.length}
           </div>
           <div className="label mt-1.5">New PRs</div>
-        </div>
-        <div className="bg-surface p-3">
-          <div className="stat-num text-[24px] text-ink">{data.durationMin ?? "—"}</div>
-          <div className="label mt-1.5">Minutes</div>
         </div>
       </div>
 
