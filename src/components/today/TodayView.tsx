@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiRaw } from "@/lib/client";
 import {
   computeConsistency,
-  computeSignals,
   cycleSignal,
   featuredLift,
   pendingRuns,
@@ -221,12 +220,13 @@ export default function TodayView() {
   const lift = useMemo(() => featuredLift(logs), [logs]);
   const consistency = useMemo(() => computeConsistency(logs), [logs]);
 
-  // Proactive signals (+ a phase-aware cycle signal) + pending run captures
+  // Today's only proactive strip item is a gentle bleeding-day note. Everything
+  // interpretive (injury watch, adherence, recovery) is the coach's job now — it
+  // reasons from live context in the brief/chat instead of firing fixed rules.
   const signals = useMemo(() => {
-    const base = computeSignals(logs, health);
     const cs = cycleSignal(cycle);
-    return cs ? [cs, ...base] : base;
-  }, [logs, health, cycle]);
+    return cs ? [cs] : [];
+  }, [cycle]);
   const suggestion = useMemo(() => suggestReadiness(health), [health]);
   const pending = useMemo(() => pendingRuns(logs), [logs]);
   const fuelingDay = !isShabbat; // strength or run day
@@ -523,8 +523,8 @@ export default function TodayView() {
           ))}
         </div>
         {consistency.streak >= 3 && (
-          <div className="text-[11px] text-accent-dim italic mt-2.5">
-            Showing up is the lever — you&apos;re on it.
+          <div className="text-[11px] text-accent-dim mt-2.5">
+            {consistency.streak} days in a row. Keep it rolling.
           </div>
         )}
       </div>

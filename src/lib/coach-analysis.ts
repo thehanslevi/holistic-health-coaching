@@ -2,7 +2,6 @@ import {
   computeConsistency,
   loggedExercises,
   progression,
-  ptCompliance,
   runSeries,
 } from "@/lib/analytics";
 import { runTraffic } from "@/lib/program";
@@ -101,8 +100,6 @@ export function buildCoachAnalysis(logs: LogRow[], health: HealthRow[]): string 
   out.push(
     `- ${sessionsThisWeek} strength sessions this week (target ~4-5). Current streak ${c.streak} days, best ${c.bestStreak}.`,
   );
-  const pt = ptCompliance(logs).find((p) => p.week === thisWeek);
-  if (pt) out.push(`- PT circuit done in ${pt.value}% of this week's sessions.`);
   if (sessionsThisWeek > 0 && sessionsThisWeek < 3) {
     out.push(
       "- MUSCLE-PROTECTION FLAG: under 3 lifting sessions this week is below the muscle-protection threshold given her medical context. This matters more than any single lift number.",

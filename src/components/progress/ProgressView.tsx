@@ -5,7 +5,6 @@ import { api } from "@/lib/client";
 import {
   loggedExercises,
   progression,
-  ptCompliance,
   runSeries,
   weeklyVolume,
   xtrainMinutes,
@@ -71,7 +70,6 @@ export default function ProgressView() {
   );
   const volume = useMemo(() => weeklyVolume(logs), [logs]);
   const runs = useMemo(() => runSeries(logs), [logs]);
-  const pt = useMemo(() => ptCompliance(logs), [logs]);
   const xtrain = useMemo(() => xtrainMinutes(logs), [logs]);
 
   const nothingYet =
@@ -203,20 +201,6 @@ export default function ProgressView() {
               <div className="text-xs text-faint py-4">
                 Log runs (with next-AM scores) to see the traffic-light trend.
               </div>
-            )}
-          </Card>
-
-          {/* PT compliance */}
-          <Card className="p-3.5">
-            <SectionLabel>PT circuit compliance</SectionLabel>
-            {pt.length ? (
-              <BarChart
-                unit="% of strength sessions with PT done"
-                color="var(--green)"
-                data={pt.map((p) => ({ x: p.week, y: p.value }))}
-              />
-            ) : (
-              <div className="text-xs text-faint py-4">Logged sessions will report PT compliance.</div>
             )}
           </Card>
 

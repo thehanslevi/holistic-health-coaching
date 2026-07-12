@@ -89,25 +89,6 @@ export function runSeries(logs: LogRow[]): RunPoint[] {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** % of strength sessions with the PT circuit done, per week */
-export function ptCompliance(logs: LogRow[]): WeekPoint[] {
-  const byWeek = new Map<string, { done: number; total: number }>();
-  for (const row of logs) {
-    if (!isSessionLog(row)) continue;
-    const wk = weekOf(row.logged_at);
-    const cur = byWeek.get(wk) ?? { done: 0, total: 0 };
-    cur.total += 1;
-    if (row.data.ptDone) cur.done += 1;
-    byWeek.set(wk, cur);
-  }
-  return [...byWeek.entries()]
-    .map(([week, { done, total }]) => ({
-      week,
-      value: Math.round((done / total) * 100),
-    }))
-    .sort((a, b) => a.week.localeCompare(b.week));
-}
-
 /** Cross-training minutes per week */
 export function xtrainMinutes(logs: LogRow[]): WeekPoint[] {
   const byWeek = new Map<string, number>();
@@ -227,7 +208,6 @@ export function weekDayHits(logs: LogRow[]): boolean[] {
 
 // ─── Proactive signals + pending captures ─────────────────────────────────────
 
-import { runTraffic } from "@/lib/program";
 import type { CycleState } from "@/lib/cycle";
 import type { HealthRow, Readiness } from "@/lib/types";
 
@@ -251,78 +231,17 @@ export function pendingRuns(logs: LogRow[]): PendingRun[] {
 
 export type Signal = { tone: "stop" | "hold" | "accent"; text: string };
 
-function volumeForWeekStart(logs: LogRow[], weekStart: string): number {
-  let vol = 0;
-  for (const row of logs) {
-    if (!isSessionLog(row) || weekOf(row.logged_at) !== weekStart) continue;
-    vol += sessionVolume(row.data);
-  }
-  return vol;
-}
-
-/** Coach-worded alerts computed from logs + health. Most severe first. */
-export function computeSignals(logs: LogRow[], health: HealthRow[]): Signal[] {
-  const out: Signal[] = [];
-
-  // Ankle / knee next-AM trend across recent runs
-  const runs = runSeries(logs);
-  const scored = runs.filter((r) => r.amKnee > 0 || r.amAnkle > 0);
-  if (scored.length >= 2) {
-    const recent = scored.slice(-3);
-    const ankleUp =
-      recent.length >= 2 &&
-      recent[recent.length - 1].amAnkle >= 3 &&
-      recent[recent.length - 1].amAnkle >= recent[0].amAnkle &&
-      recent[recent.length - 1].amAnkle > 2;
-    const kneeUp =
-      recent.length >= 2 &&
-      recent[recent.length - 1].amKnee >= 3 &&
-      recent[recent.length - 1].amKnee >= recent[0].amKnee;
-    const last = scored[scored.length - 1];
-    const light = runTraffic(last.amKnee, last.amAnkle).light;
-    if (light === "red")
-      out.push({ tone: "stop", text: "Last run's next-AM response was red. Bike or pool only until it settles, and flag it for PT." });
-    else if (ankleUp)
-      out.push({ tone: "hold", text: `Right ankle next-AM is climbing (now ${last.amAnkle}/10). Freeze run volume and refine form before adding mileage.` });
-    else if (kneeUp)
-      out.push({ tone: "hold", text: `Left knee next-AM is trending up (now ${last.amKnee}/10). Hold volume and watch it into the next afternoon.` });
-  }
-
-  // Weekly volume spike (current logged week vs prior)
-  const weeks = weeklyVolume(logs).map((w) => w.week);
-  if (weeks.length >= 2) {
-    const thisW = weeks[weeks.length - 1];
-    const prevW = weeks[weeks.length - 2];
-    const cur = volumeForWeekStart(logs, thisW);
-    const prev = volumeForWeekStart(logs, prevW);
-    if (prev > 0 && cur > prev * 1.35) {
-      const pct = Math.round(((cur - prev) / prev) * 100);
-      out.push({ tone: "hold", text: `Weekly lifting volume is up ${pct}% over last week. Strong, but watch knee response and fatigue.` });
-    }
-  }
-
-  // PT compliance slipping this week
-  const pt = ptCompliance(logs);
-  if (pt.length) {
-    const thisWeek = weekOf(new Date().toISOString().slice(0, 10));
-    const cur = pt.find((p) => p.week === thisWeek);
-    const sessionsThisWeek = logs.filter(
-      (r) => isSessionLog(r) && weekOf(r.logged_at) === thisWeek,
-    ).length;
-    if (cur && sessionsThisWeek >= 2 && cur.value < 50)
-      out.push({ tone: "accent", text: `PT circuit is at ${cur.value}% this week. It's your posterior-tibial insurance for running — don't let it slide.` });
-  }
-
-  // Sleep low (Apple Health)
-  const slept = health.filter((h) => h.sleep_hours != null).slice(0, 3);
-  if (slept.length >= 2) {
-    const avg = slept.reduce((s, h) => s + (h.sleep_hours ?? 0), 0) / slept.length;
-    if (avg < 6.5)
-      out.push({ tone: "hold", text: `Sleep is averaging ${avg.toFixed(1)}h over your last ${slept.length} nights. Sleep is foundational — protect it before pushing intensity.` });
-  }
-
-  return out.slice(0, 4);
-}
+// The Today "signals" strip used to be a set of hardcoded rule-based alerts
+// (ankle/knee trend, volume spike, PT compliance, low sleep). Those drew stale,
+// over-generalized conclusions that couldn't tell her training had evolved (a
+// dead PT circuit still getting nagged, arbitrary volume thresholds, generic
+// sleep scolding). All interpretive/judgment calls now live with the LLM coach
+// — the morning brief and coach chat reason from buildCoachAnalysis + full live
+// context (including the run traffic light and orthopedic status), so they can
+// raise a real concern in-voice instead of firing a fixed rule that doesn't
+// know she's moved on. The only remaining Today signal is cycleSignal (a gentle
+// bleeding-day note grounded in current fact). See coach-context.ts /
+// coach-analysis.ts for the model path.
 
 // ─── Data-informed readiness (proposes G/Y/R; the athlete keeps the final call) ─
 

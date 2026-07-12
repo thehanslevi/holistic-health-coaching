@@ -452,7 +452,7 @@ export default function SessionLogger({
           </div>
           {(
             [
-              { field: "ptDone", label: "PT Circuit as warm-up (Spear — 18 min, after bike)" },
+              { field: "ptDone", label: "PT / mobility warm-up — optional (Spear — 18 min, after bike)" },
               { field: "exerciseTherapyDone", label: "Exercise Therapy done separately (AM / midday)" },
             ] as const
           ).map(({ field, label }) => (
@@ -843,7 +843,8 @@ export default function SessionLogger({
       )}
 
       <div className="text-xs text-muted mt-4">
-        Knee {data.kneeStart}→{data.kneeEnd} · PT {data.ptDone ? "done" : "skipped"} · cooldown{" "}
+        Knee {data.kneeStart}→{data.kneeEnd}
+        {data.ptDone ? " · PT done" : ""} · cooldown{" "}
         {data.cooldownCount}/{data.cooldownTotal}
       </div>
 

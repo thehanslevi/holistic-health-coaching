@@ -144,7 +144,6 @@ export async function buildWeeklyShareText(): Promise<{ text: string; week: stri
   const fueledRows = recovery.filter((r) => r.fueled != null);
   const fueledYes = fueledRows.filter((r) => r.fueled).length;
   const sessionLogs = logs.filter(isSessionLog);
-  const ptDone = sessionLogs.filter((r) => r.data.ptDone).length;
 
   if (health_bits.length || checkins.length || recovery.length || sessionLogs.length) {
     parts.push("");
@@ -153,7 +152,6 @@ export async function buildWeeklyShareText(): Promise<{ text: string; week: stri
     parts.push(`Readiness: ${seq.join(" ")}`);
     const compliance: string[] = [];
     if (fueledRows.length) compliance.push(`Fueled ${fueledYes}/${fueledRows.length}`);
-    if (sessionLogs.length) compliance.push(`PT ${ptDone}/${sessionLogs.length}`);
     if (compliance.length) parts.push(compliance.join(" · "));
   }
 

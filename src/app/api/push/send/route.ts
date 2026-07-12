@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errorResponse } from "@/lib/auth";
-import { computeSignals, pendingRuns } from "@/lib/analytics";
+import { pendingRuns } from "@/lib/analytics";
 import { getOrCreateDailyBrief } from "@/lib/brief";
 import { supabase } from "@/lib/supabase";
-import type { HealthRow, LogRow } from "@/lib/types";
+import type { LogRow } from "@/lib/types";
 import { sendPushToAll, type PushPayload } from "@/lib/push";
 
 // Daily morning push. Triggered by Vercel Cron (see vercel.json). Composes the
-// notification from the coach's brief + the top red-flag signal + any pending
-// run-scoring reminder, then fans it out to every stored subscription.
+// notification from the coach's brief + any pending run-scoring reminder, then
+// fans it out to every stored subscription.
 //
 // Auth: Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`. We also accept
 // the app passcode (?key= or bearer) so the send can be triggered/tested by hand.
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     if (req.nextUrl.searchParams.get("test") === "1") {
       const result = await sendPushToAll({
         title: "Volt — morning coach on",
-        body: "This is a test. Your brief and red-flag signals land here at 8 AM.",
+        body: "This is a test. Your morning brief lands here at 8 AM.",
         url: "/",
         tag: "test",
       });
@@ -49,30 +49,22 @@ export async function GET(req: NextRequest) {
     since.setDate(since.getDate() - 35);
     const sinceISO = since.toISOString().slice(0, 10);
 
-    const [logsRes, healthRes] = await Promise.all([
-      db
-        .from("hrl_logs")
-        .select("*")
-        .gte("logged_at", sinceISO)
-        .order("logged_at", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(200),
-      db.from("hrl_health").select("*").order("date", { ascending: false }).limit(7),
-    ]);
+    const logsRes = await db
+      .from("hrl_logs")
+      .select("*")
+      .gte("logged_at", sinceISO)
+      .order("logged_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(200);
     const logs = (logsRes.data ?? []) as LogRow[];
-    const health = (healthRes.data ?? []) as HealthRow[];
 
-    const signals = computeSignals(logs, health);
     const pending = pendingRuns(logs);
+    // The brief is the single interpretive voice now — it reasons from live
+    // context (run traffic light, orthopedic status, analysis) and raises any
+    // real concern in-voice. No separate rule-based signal layer to prepend.
     const { content: brief } = await getOrCreateDailyBrief();
 
-    // Body: lead with the most severe signal, then the brief, then a nudge.
     const parts: string[] = [];
-    const topSignal = signals[0];
-    if (topSignal) {
-      const flag = topSignal.tone === "stop" ? "🛑 " : topSignal.tone === "hold" ? "⚠️ " : "";
-      parts.push(`${flag}${topSignal.text}`);
-    }
     if (brief) parts.push(brief);
     if (pending.length) {
       const r = pending[0];
@@ -91,7 +83,7 @@ export async function GET(req: NextRequest) {
 
     // ?dry=1 → build the payload but don't send (for inspecting content).
     if (req.nextUrl.searchParams.get("dry") === "1") {
-      return NextResponse.json({ dryRun: true, payload, signals: signals.length, pending: pending.length });
+      return NextResponse.json({ dryRun: true, payload, pending: pending.length });
     }
 
     const result = await sendPushToAll(payload);
