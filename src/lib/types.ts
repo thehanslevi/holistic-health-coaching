@@ -154,3 +154,16 @@ export type Phase = {
   status: "active" | "archived";
   created_at: string;
 };
+
+// ─── Living profile — user-maintained current status (overrides stale context) ─
+
+export type ProfileKind = "priority" | "constraint" | "note";
+
+export type ProfileEntry = {
+  id: string;
+  kind: ProfileKind;
+  text: string;
+  status: "active" | "resolved";
+  created_at: string;
+  updated_at: string;
+};

@@ -10,7 +10,29 @@ import {
   type CoachContextSummary,
   type HealthRow,
   type LogRow,
+  type ProfileEntry,
 } from "@/lib/types";
+
+// The living profile Hannah maintains — authoritative, current, and overrides
+// anything older in the static system prompt.
+export function profileBlock(entries: ProfileEntry[]): string {
+  if (!entries.length) return "";
+  const active = entries.filter((e) => e.status === "active");
+  const resolved = entries.filter((e) => e.status === "resolved");
+  const label = (k: string) => (k === "priority" ? "priority" : k === "constraint" ? "constraint" : "note");
+  const lines = [
+    "HANNAH'S CURRENT STATUS — she maintains this herself. It is CURRENT and AUTHORITATIVE. It OVERRIDES anything older in your background profile; where they conflict, THIS wins. Do not apply an old constraint she has marked resolved.",
+  ];
+  if (active.length) {
+    lines.push("Current:");
+    for (const e of active) lines.push(`- [${label(e.kind)}] ${e.text}`);
+  }
+  if (resolved.length) {
+    lines.push("Resolved / no longer a factor (do NOT program around these):");
+    for (const e of resolved) lines.push(`- ${e.text}`);
+  }
+  return lines.join("\n") + "\n";
+}
 
 const WINDOW_DAYS = 14;
 const MAX_CONTEXT_CHARS = 9000;
@@ -51,7 +73,7 @@ export async function buildCoachContext(): Promise<{
 
   const cycleSince = daysAgoISO(180);
   const trendSince = daysAgoISO(28);
-  const [logsRes, checkinRes, memory, healthRes, ovrRes, recoveryRes, cycleRes, trendRes] =
+  const [logsRes, checkinRes, memory, healthRes, ovrRes, recoveryRes, cycleRes, trendRes, profileRes] =
     await Promise.all([
       db
         .from("hrl_logs")
@@ -72,6 +94,11 @@ export async function buildCoachContext(): Promise<{
         .gte("logged_at", trendSince)
         .order("logged_at", { ascending: false })
         .limit(80),
+      db
+        .from("hrl_profile")
+        .select("*")
+        .order("status", { ascending: true })
+        .order("created_at", { ascending: true }),
     ]);
   if (logsRes.error) throw new Error(logsRes.error.message);
 
@@ -176,13 +203,14 @@ export async function buildCoachContext(): Promise<{
   }
 
   const mem = memoryBlock(memory);
+  const profile = profileBlock((profileRes.data ?? []) as ProfileEntry[]);
   const analysis = buildCoachAnalysis(
     (trendRes.data ?? []) as LogRow[],
     (healthRes.data ?? []) as HealthRow[],
   );
   const blockBody = `${lines.join("\n")}\n\n${analysis}`;
   return {
-    block: mem ? `${mem}\n${blockBody}` : blockBody,
+    block: [profile, mem, blockBody].filter(Boolean).join("\n"),
     summary: {
       sessionCount,
       runStatus: traffic?.light ?? null,

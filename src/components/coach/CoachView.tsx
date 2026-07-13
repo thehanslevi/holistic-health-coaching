@@ -20,6 +20,7 @@ import {
 } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
 import ShareWeek from "@/components/ShareWeek";
+import StatusPanel from "@/components/coach/StatusPanel";
 import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
 import { primeVoices, speak } from "@/lib/speech";
 
@@ -327,6 +328,8 @@ export default function CoachView() {
             New +
           </Button>
         </div>
+
+        <StatusPanel />
 
         <MemoryPanel />
 
