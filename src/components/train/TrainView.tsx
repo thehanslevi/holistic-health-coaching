@@ -16,6 +16,7 @@ import RunHub from "@/components/train/RunHub";
 import XtrainLogger from "@/components/train/XtrainLogger";
 import HistoryList from "@/components/train/HistoryList";
 import ProgressionReview from "@/components/train/ProgressionReview";
+import ProgramReview from "@/components/train/ProgramReview";
 import ProgramView from "@/components/train/ProgramView";
 import WeekBalance from "@/components/train/WeekBalance";
 import { useApp } from "@/components/AppShell";
@@ -26,6 +27,7 @@ type Screen =
   | { name: "run"; date?: string }
   | { name: "xtrain"; date?: string }
   | { name: "progression" }
+  | { name: "program-review" }
   | { name: "program" };
 
 export default function TrainView() {
@@ -59,6 +61,8 @@ export default function TrainView() {
     return <XtrainLogger initialDate={screen.date} onClose={() => setScreen({ name: "home" })} />;
   if (screen.name === "progression")
     return <ProgressionReview onClose={() => setScreen({ name: "home" })} />;
+  if (screen.name === "program-review")
+    return <ProgramReview onClose={() => setScreen({ name: "home" })} />;
   if (screen.name === "program")
     return (
       <ProgramView
@@ -140,6 +144,23 @@ export default function TrainView() {
                 </div>
                 <div className="text-[11px] text-muted mt-0.5">
                   Have the coach check if any lift has earned a bump
+                </div>
+              </div>
+              <span className="text-accent text-lg">→</span>
+            </div>
+          </Card>
+
+          <Card
+            onClick={() => setScreen({ name: "program-review" })}
+            className="p-3.5 mb-2 border-accent/40"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="display text-[13px] tracking-[0.06em] text-accent">
+                  Program review
+                </div>
+                <div className="text-[11px] text-muted mt-0.5">
+                  Coach reads your whole program vs. your goals — what to add, swap, or drop
                 </div>
               </div>
               <span className="text-accent text-lg">→</span>
