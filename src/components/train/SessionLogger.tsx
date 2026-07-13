@@ -17,6 +17,7 @@ import { Button, Delta, Field, SectionLabel, inputClass } from "@/components/ui"
 import { useApp } from "@/components/AppShell";
 import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
 import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
+import { clearSessionDraft, readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
 
 const REST_SECONDS = 90;
 
@@ -82,10 +83,10 @@ function RestTimer({
   return (
     <button
       onClick={onDismiss}
-      className="fixed bottom-16 inset-x-0 z-50 cursor-pointer"
+      className="fixed bottom-0 inset-x-0 z-50 cursor-pointer"
       aria-label="Dismiss rest timer"
     >
-      <div className="max-w-[520px] mx-auto bg-accent text-accent-ink flex items-center justify-between px-5 py-3">
+      <div className="max-w-[520px] mx-auto bg-accent text-accent-ink flex items-center justify-between px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <span className="display text-[15px] tracking-[0.12em]">Rest</span>
         <span className="stat-num text-[28px]">
           {mm}:{ss}
@@ -273,6 +274,24 @@ export default function SessionLogger({
   }, []);
   const adjust = sessionAdjustment(readiness);
 
+  // Restore an in-progress draft for this session (survives an app reload).
+  useEffect(() => {
+    const d = readSessionDraft();
+    if (d && d.sessionKey === sessionKey) {
+      setLog(d.log);
+      setDoneSets(d.doneSets ?? {});
+      setStage(d.stage as Stage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist the draft while actively logging.
+  useEffect(() => {
+    if (stage.name === "exercise" || stage.name === "finish") {
+      writeSessionDraft({ sessionKey, stage, log, doneSets });
+    }
+  }, [stage, log, doneSets, sessionKey]);
+
   // Voice cues (built-in speech), remembered across sessions.
   const [voiceOn, setVoiceOn] = useState(false);
   useEffect(() => {
@@ -365,6 +384,7 @@ export default function SessionLogger({
         }),
       });
       addLog(row);
+      clearSessionDraft();
       setStage({ name: "saved", row });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");

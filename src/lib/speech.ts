@@ -42,7 +42,10 @@ function unlock() {
 }
 
 export function primeVoices() {
-  unlock(); // unlocks when called from a gesture; harmless otherwise
+  // Only warm the built-in voice list. Do NOT touch the <audio> element here —
+  // creating/playing audio on mount grabs the iOS audio session and pauses
+  // other apps (e.g. Spotify). Audio is unlocked lazily inside speak(), which
+  // runs from a real user tap on a voice control.
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.getVoices();
   }

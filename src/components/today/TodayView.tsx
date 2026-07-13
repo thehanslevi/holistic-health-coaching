@@ -25,6 +25,7 @@ import { useApp } from "@/components/AppShell";
 import CalendarOverlay from "@/components/today/CalendarOverlay";
 import RecoveryCard from "@/components/today/RecoveryCard";
 import PushOptIn from "@/components/today/PushOptIn";
+import ResumeSessionCard from "@/components/today/ResumeSessionCard";
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
@@ -285,6 +286,9 @@ export default function TodayView() {
                 : schedule.label.toUpperCase()}
         </span>
       </div>
+
+      {/* Resume an unfinished session (survives an app reload) */}
+      <ResumeSessionCard />
 
       {/* Readiness — coach read (data-informed) + your call */}
       <div className="mt-6">
