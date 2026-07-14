@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { buildCoachAnalysis } from "@/lib/coach-analysis";
-import { fetchMemoryNotes, memoryBlock } from "@/lib/coach-context";
+import { decisionsBlock, fetchOpenDecisions } from "@/lib/coach-context";
 import { formatLogAsText } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { SYSTEM_PROMPT } from "@/lib/system-prompt";
@@ -68,7 +68,7 @@ export async function getOrCreateWeeklyReview(
 
   const analysis = buildCoachAnalysis(trendLogs, health);
   const weekLogsText = logs.map((l) => formatLogAsText(l)).join("\n\n");
-  const mem = memoryBlock(await fetchMemoryNotes(db));
+  const open = decisionsBlock(await fetchOpenDecisions(db));
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
@@ -77,7 +77,7 @@ export async function getOrCreateWeeklyReview(
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
       {
         type: "text",
-        text: `${mem}${analysis}\n\n--- THIS WEEK'S SESSIONS (for reference only, do not recap) ---\n${weekLogsText}`,
+        text: `${open}${analysis}\n\n--- THIS WEEK'S SESSIONS (for reference only, do not recap) ---\n${weekLogsText}`,
       },
     ],
     messages: [

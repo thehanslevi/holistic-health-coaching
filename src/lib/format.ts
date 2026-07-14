@@ -1,4 +1,5 @@
 import { SESSIONS, runTraffic, type SessionKey } from "@/lib/program";
+import type { ProgramSessions } from "@/lib/program-resolve";
 import {
   isRunLog,
   isSessionLog,
@@ -7,8 +8,12 @@ import {
   type SessionLogData,
 } from "@/lib/types";
 
-function formatSessionLog(data: SessionLogData): string {
-  const session = SESSIONS[data.sessionKey as SessionKey];
+// `sessions` defaults to the code template so existing callers are unaffected.
+// Pass the RESOLVED program wherever it's available — otherwise sets she logged
+// against a coach-added exercise render as nothing at all, because the template
+// has no such exercise to iterate.
+function formatSessionLog(data: SessionLogData, sessions: ProgramSessions = SESSIONS): string {
+  const session = sessions[data.sessionKey as SessionKey];
   const sessionLabel = session
     ? `${session.label}: ${session.subtitle}`
     : data.sessionKey;
@@ -44,7 +49,7 @@ function formatSessionLog(data: SessionLogData): string {
   return lines.join("\n");
 }
 
-export function formatLogAsText(row: LogRow): string {
+export function formatLogAsText(row: LogRow, sessions: ProgramSessions = SESSIONS): string {
   if (isXtrainLog(row)) {
     const d = row.data;
     return [
@@ -72,6 +77,6 @@ export function formatLogAsText(row: LogRow): string {
       .filter(Boolean)
       .join("\n");
   }
-  if (isSessionLog(row)) return formatSessionLog(row.data);
+  if (isSessionLog(row)) return formatSessionLog(row.data, sessions);
   return JSON.stringify(row.data);
 }

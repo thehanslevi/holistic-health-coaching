@@ -16,6 +16,99 @@ const CARRY_OPTS: { value: Carry; label: string; hint: string }[] = [
   { value: "reset", label: "Reset to base program", hint: "Clear overrides — back to the program's default targets." },
 ];
 
+type ProgramChange = {
+  id: string;
+  created_at: string;
+  session_key: string | null;
+  summary: string;
+  rationale: string;
+  source: "coach" | "manual";
+  reverted_at: string | null;
+};
+
+// What the coach changed, and why — with an undo.
+//
+// The coach is allowed to edit her program unprompted (her call). This panel is
+// the other half of that bargain: no change is silent, every change carries its
+// reasoning, and any of it can be taken back. Control after the fact rather than
+// a permission gate before it.
+function ProgramChanges() {
+  const { refreshPhase } = useApp();
+  const [changes, setChanges] = useState<ProgramChange[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api<ProgramChange[]>("/api/program/changes")
+      .then(setChanges)
+      .catch(() => setChanges([]));
+  }, []);
+
+  useEffect(load, [load]);
+
+  const undo = async (c: ProgramChange) => {
+    setBusy(c.id);
+    setErr(null);
+    try {
+      await api(`/api/program/changes/${c.id}`, { method: "POST" });
+      await Promise.all([refreshPhase(), Promise.resolve(load())]);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not undo that.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const live = changes.filter((c) => !c.reverted_at);
+  if (!changes.length) return null;
+
+  return (
+    <>
+      <div className="label mt-7 mb-2">
+        Coach changes {live.length > 0 ? `· ${live.length} live` : ""}
+      </div>
+      <div className="space-y-2">
+        {changes.map((c) => {
+          const undone = !!c.reverted_at;
+          return (
+            <div
+              key={c.id}
+              className={`border px-3.5 py-3 ${undone ? "border-line opacity-50" : "border-line-strong bg-surface"}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div
+                    className={`text-[13px] leading-snug ${undone ? "text-faint line-through" : "text-ink"}`}
+                  >
+                    {c.summary}
+                  </div>
+                  <div className="text-[12px] text-muted leading-snug mt-1">{c.rationale}</div>
+                  <div className="text-[10px] text-faint mt-1.5 num">
+                    {new Date(c.created_at).toLocaleDateString()} ·{" "}
+                    {c.source === "coach" ? "by your coach" : "by you"}
+                    {undone ? " · undone" : ""}
+                  </div>
+                </div>
+                {!undone && (
+                  <button
+                    onClick={() => undo(c)}
+                    disabled={busy === c.id}
+                    className="label !text-[10px] !text-faint hover:!text-stop cursor-pointer shrink-0 disabled:opacity-40"
+                    title="Restore the program to how it was before this change. Anything changed after it is undone too."
+                  >
+                    {busy === c.id ? "…" : "Undo"}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {err && <div className="text-xs text-stop mt-2">{err}</div>}
+    </>
+  );
+}
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -300,6 +393,8 @@ export default function ProgramView({
               Edit this phase
             </Button>
           </div>
+
+          <ProgramChanges />
 
           <div className="label mt-7 mb-2">History</div>
           {history.length === 0 ? (

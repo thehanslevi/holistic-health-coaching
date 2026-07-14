@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { checkAuth, errorResponse } from "@/lib/auth";
 import { buildCoachAnalysis } from "@/lib/coach-analysis";
-import { fetchMemoryNotes, memoryBlock } from "@/lib/coach-context";
+import { decisionsBlock, fetchOpenDecisions } from "@/lib/coach-context";
 import { SESSIONS, SESSION_ORDER } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
 import { SYSTEM_PROMPT } from "@/lib/system-prompt";
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
     const trendSince = new Date();
     trendSince.setDate(trendSince.getDate() - 28);
-    const [ovrRes, logsRes, healthRes, memory] = await Promise.all([
+    const [ovrRes, logsRes, healthRes, decisions] = await Promise.all([
       db.from("hrl_program_overrides").select("*"),
       db
         .from("hrl_logs")
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
         .order("logged_at", { ascending: false })
         .limit(80),
       db.from("hrl_health").select("*").order("date", { ascending: false }).limit(21),
-      fetchMemoryNotes(db),
+      fetchOpenDecisions(db),
     ]);
 
     const overrides = new Map(
@@ -74,11 +74,11 @@ export async function GET(req: NextRequest) {
       for (const k of Object.keys(row.data.sets)) logged.add(k.replace(/_s\d+$/, ""));
     }
 
-    const mem = memoryBlock(memory);
+    const open = decisionsBlock(decisions);
     const system: Anthropic.TextBlockParam[] = [
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
     ];
-    if (mem) system.push({ type: "text", text: mem });
+    if (open) system.push({ type: "text", text: open });
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",

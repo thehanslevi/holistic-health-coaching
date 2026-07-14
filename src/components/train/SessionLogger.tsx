@@ -238,8 +238,10 @@ export default function SessionLogger({
   initialDate?: string;
   onClose: () => void;
 }) {
-  const session = SESSIONS[sessionKey];
-  const { logs, addLog, askCoach, overrides } = useApp();
+  // Resolved, not the code template — this is the workout she actually does, so
+  // it has to reflect anything the coach swapped, added, or dropped.
+  const { logs, addLog, askCoach, overrides, sessions } = useApp();
+  const session = sessions[sessionKey];
 
   const prev = useMemo(() => lastSessionLog(logs, sessionKey), [logs, sessionKey]);
 

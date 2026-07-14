@@ -33,104 +33,6 @@ const QUICK_PROMPTS = [
   "What should I eat around training today?",
 ];
 
-type MemoryNote = { id: string; content: string; source: "coach" | "manual" };
-
-function MemoryPanel() {
-  const [notes, setNotes] = useState<MemoryNote[]>([]);
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [adding, setAdding] = useState(false);
-
-  const load = useCallback(() => {
-    api<MemoryNote[]>("/api/memory")
-      .then(setNotes)
-      .catch(() => {});
-  }, []);
-
-  useEffect(load, [load]);
-
-  const add = async () => {
-    const content = draft.trim();
-    if (!content || adding) return;
-    setAdding(true);
-    try {
-      const note = await api<MemoryNote>("/api/memory", {
-        method: "POST",
-        body: JSON.stringify({ content }),
-      });
-      setNotes((n) => [...n, note]);
-      setDraft("");
-    } catch {
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const remove = async (id: string) => {
-    setNotes((n) => n.filter((x) => x.id !== id));
-    try {
-      await api(`/api/memory/${id}`, { method: "DELETE" });
-    } catch {
-      load();
-    }
-  };
-
-  return (
-    <div className="border border-line mb-4">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-3.5 py-3 cursor-pointer"
-      >
-        <span className="label !text-accent">Coach remembers · {notes.length}</span>
-        <span className="text-faint text-xs">{open ? "▴" : "▾"}</span>
-      </button>
-      {open && (
-        <div className="px-3.5 pb-3.5 border-t border-line pt-3">
-          {notes.length === 0 ? (
-            <div className="text-xs text-faint mb-3">
-              Nothing yet. The coach saves durable facts as you talk — or pin one below.
-            </div>
-          ) : (
-            <div className="space-y-2 mb-3">
-              {notes.map((note) => (
-                <div key={note.id} className="flex items-start gap-2">
-                  <span
-                    className={`mt-1 w-1.5 h-1.5 shrink-0 ${
-                      note.source === "manual" ? "bg-accent" : "bg-line-strong"
-                    }`}
-                  />
-                  <span className="flex-1 text-[13px] text-muted leading-snug">
-                    {note.content}
-                  </span>
-                  <button
-                    onClick={() => remove(note.id)}
-                    aria-label="Forget this"
-                    className="text-faint hover:text-stop text-xs cursor-pointer shrink-0"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex gap-2">
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && add()}
-              placeholder="Pin something for the coach to remember"
-              className={`${inputClass} !py-2 text-[13px]`}
-            />
-            <Button size="sm" variant="secondary" onClick={add} disabled={adding || !draft.trim()}>
-              Pin
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function Markdown({ content }: { content: string }) {
   return (
     <div className="coach-md text-sm leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:mb-2 [&_ul]:pl-4 [&_ul]:list-disc [&_ol]:mb-2 [&_ol]:pl-4 [&_ol]:list-decimal [&_li]:mb-0.5 [&_strong]:text-ink [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-bold [&_h1]:mb-1.5 [&_h2]:mb-1.5 [&_h3]:mb-1 [&_table]:w-full [&_table]:text-xs [&_table]:my-2 [&_th]:text-left [&_th]:border-b [&_th]:border-line-strong [&_th]:py-1 [&_td]:py-1 [&_td]:border-b [&_td]:border-line [&_code]:num [&_code]:text-[12px] [&_code]:bg-surface-3 [&_code]:px-1">
@@ -160,6 +62,10 @@ function ContextIndicator() {
   );
 }
 
+// Delimiter for the coach stream's control frames. ASCII record separator —
+// never appears in model output, so it can't collide with the reply text.
+const RS = "\x1e";
+
 export default function CoachView() {
   const { coachDraft, consumeCoachDraft, tab } = useApp();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -168,6 +74,9 @@ export default function CoachView() {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  // What the coach is doing right now — thinking, or reading a specific slice of
+  // her data. A tool-using turn has real pauses; this makes them legible.
+  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -256,13 +165,48 @@ export default function CoachView() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let assistantText = "";
+      let buffer = "";
+
+      const appendText = (chunk: string) => {
+        if (!chunk) return;
+        assistantText += chunk;
+        setStatus(null); // real output supersedes any "looking something up" note
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        assistantText += decoder.decode(value, { stream: true });
+        buffer += decoder.decode(value, { stream: true });
+
+        // Control frames arrive wrapped in \x1e pairs; everything else is the
+        // coach's own text. A frame split across reads stays buffered until its
+        // closing delimiter lands, so it never leaks into the message body.
+        let cut = 0;
+        while (true) {
+          const open = buffer.indexOf(RS, cut);
+          if (open === -1) break;
+          const close = buffer.indexOf(RS, open + 1);
+          if (close === -1) break;
+          appendText(buffer.slice(cut, open));
+          try {
+            const ctrl = JSON.parse(buffer.slice(open + 1, close));
+            if (ctrl?.type === "status") setStatus(ctrl.text || null);
+          } catch {}
+          cut = close + 1;
+        }
+        const partial = buffer.indexOf(RS, cut);
+        if (partial === -1) {
+          appendText(buffer.slice(cut));
+          buffer = "";
+        } else {
+          appendText(buffer.slice(cut, partial));
+          buffer = buffer.slice(partial);
+        }
+
         const current = assistantText;
         setMessages([...base, { role: "assistant", content: current }]);
       }
+      setStatus(null);
       loadConversations();
 
       // If she asked by voice, read the answer back.
@@ -271,18 +215,10 @@ export default function CoachView() {
         speak(assistantText);
       }
 
-      // Fire-and-forget: let the coach consolidate what's worth remembering
-      const captureConv = newConvId ?? convId;
-      if (captureConv) {
-        void fetch("/api/memory/capture", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${getPasscode() ?? ""}`,
-          },
-          body: JSON.stringify({ conversationId: captureConv }),
-        }).catch(() => {});
-      }
+      // Nothing fires here any more. This used to kick off /api/memory/capture,
+      // which had the model rewrite its whole note list after every turn — the
+      // source of the drift. What's worth carrying forward is now written
+      // deliberately, in the moment, by the coach itself via record_decision.
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         // Stop pressed — keep the partial text already rendered
@@ -293,6 +229,7 @@ export default function CoachView() {
       }
     } finally {
       setStreaming(false);
+      setStatus(null);
       abortRef.current = null;
     }
   };
@@ -330,8 +267,6 @@ export default function CoachView() {
         </div>
 
         <StatusPanel />
-
-        <MemoryPanel />
 
         <div className="mb-4">
           <ShareWeek variant="inline" />
@@ -413,9 +348,15 @@ export default function CoachView() {
               <div className="max-w-[92%] text-muted">
                 {m.content ? (
                   <Markdown content={m.content} />
-                ) : streaming && i === messages.length - 1 ? (
+                ) : streaming && i === messages.length - 1 && !status ? (
                   <Dots />
                 ) : null}
+                {streaming && i === messages.length - 1 && status && (
+                  <div className="flex items-center gap-2 py-1 text-xs tracking-wide text-faint">
+                    <Dots />
+                    <span>{status}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

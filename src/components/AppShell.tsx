@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { api, ApiError, clearPasscode, getPasscode, setPasscode } from "@/lib/client";
+import { resolveProgram, type ProgramSessions } from "@/lib/program-resolve";
 import type { LogRow, Phase, ProgramOverride } from "@/lib/types";
 import { Button, inputClass } from "@/components/ui";
 import TodayView from "@/components/today/TodayView";
@@ -44,6 +45,11 @@ type AppContextValue = {
   // Active training phase (program-as-data)
   activePhase: Phase | null;
   refreshPhase: () => Promise<void>;
+  // The program as it ACTUALLY is right now: the active phase's snapshot (or the
+  // program.ts template if unedited) with target overrides layered on. Everything
+  // that renders exercises must read this, never SESSIONS directly — otherwise
+  // the coach swaps a lift and her logger keeps showing the old one.
+  sessions: ProgramSessions;
   lock: () => void;
 };
 
@@ -158,6 +164,13 @@ export default function AppShell() {
   const [overrides, setOverrides] = useState<Record<string, ProgramOverride>>({});
   const [activePhase, setActivePhase] = useState<Phase | null>(null);
 
+  // One resolve for the whole app. Recomputes when the coach edits the program
+  // (snapshot changes on the phase) or a target override moves.
+  const sessions = useMemo(
+    () => resolveProgram(activePhase?.program_snapshot ?? null, overrides),
+    [activePhase?.program_snapshot, overrides],
+  );
+
   useEffect(() => {
     setUnlocked(!!getPasscode());
   }, []);
@@ -251,12 +264,13 @@ export default function AppShell() {
       refreshOverrides,
       activePhase,
       refreshPhase,
+      sessions,
       lock: () => {
         clearPasscode();
         setUnlocked(false);
       },
     }),
-    [tab, coachDraft, trainIntent, logs, logsLoading, refreshLogs, refreshOverrides, overrides, activePhase, refreshPhase],
+    [tab, coachDraft, trainIntent, logs, logsLoading, refreshLogs, refreshOverrides, overrides, activePhase, refreshPhase, sessions],
   );
 
   if (unlocked === null) return null;

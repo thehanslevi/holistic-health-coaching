@@ -1,4 +1,5 @@
 import { SESSIONS, SESSION_ORDER } from "@/lib/program";
+import type { ProgramSessions } from "@/lib/program-resolve";
 import { isRunLog, isSessionLog, isXtrainLog, type LogRow } from "@/lib/types";
 
 // All series are derived client-side from the shared logs cache.
@@ -14,8 +15,16 @@ function weekOf(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Exercises (across all sessions) that have at least one logged weighted set */
-export function loggedExercises(logs: LogRow[]): { id: string; name: string }[] {
+/**
+ * Exercises (across all sessions) that have at least one logged weighted set.
+ * `sessions` defaults to the code template; pass the resolved program so
+ * coach-added exercises appear in progression charts rather than silently
+ * dropping out of her history.
+ */
+export function loggedExercises(
+  logs: LogRow[],
+  sessions: ProgramSessions = SESSIONS,
+): { id: string; name: string }[] {
   const seen = new Set<string>();
   for (const row of logs) {
     if (!isSessionLog(row)) continue;
@@ -25,7 +34,7 @@ export function loggedExercises(logs: LogRow[]): { id: string; name: string }[] 
   }
   const out: { id: string; name: string }[] = [];
   for (const sk of SESSION_ORDER) {
-    for (const ex of SESSIONS[sk].exercises) {
+    for (const ex of sessions[sk].exercises) {
       if (seen.has(ex.id)) out.push({ id: ex.id, name: `${ex.name} (${sk})` });
     }
   }

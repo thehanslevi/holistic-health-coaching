@@ -1,5 +1,7 @@
 import { getOrCreateWeeklyReview, mondayOf } from "@/lib/review";
 import { SESSIONS, runTraffic, type SessionKey } from "@/lib/program";
+import type { ProgramSessions } from "@/lib/program-resolve";
+import { getResolvedProgram } from "@/lib/program-server";
 import { getActivePhase } from "@/lib/phases";
 import { phaseLabel } from "@/lib/phase-format";
 import { supabase } from "@/lib/supabase";
@@ -21,8 +23,8 @@ function shortDay(dateStr: string): string {
 }
 
 // Best (heaviest) set per exercise in a session, as "Name R×W".
-function topSets(data: SessionLogData): string[] {
-  const session = SESSIONS[data.sessionKey as SessionKey];
+function topSets(data: SessionLogData, sessions: ProgramSessions): string[] {
+  const session = sessions[data.sessionKey as SessionKey];
   if (!session) return [];
   const out: string[] = [];
   for (const ex of session.exercises) {
@@ -40,12 +42,12 @@ function topSets(data: SessionLogData): string[] {
   return out;
 }
 
-function formatSession(row: LogRow & { data: SessionLogData }): string {
+function formatSession(row: LogRow & { data: SessionLogData }, sessions: ProgramSessions): string {
   const d = row.data;
-  const session = SESSIONS[d.sessionKey as SessionKey];
+  const session = sessions[d.sessionKey as SessionKey];
   const label = session ? `${session.label} (${d.sessionKey})` : d.sessionKey;
   const lines = [`${shortDay(row.logged_at)}  ${label}`];
-  const sets = topSets(d);
+  const sets = topSets(d, sessions);
   if (sets.length) lines.push(`  ${sets.join(" · ")}`);
   const tail: string[] = [`Knee ${d.kneeStart}→${d.kneeEnd}`];
   if (d.ptDone) tail.push("PT ✓");
@@ -75,7 +77,7 @@ export async function buildWeeklyShareText(): Promise<{ text: string; week: stri
   weekEndD.setDate(weekEndD.getDate() + 6);
   const weekEnd = weekEndD.toISOString().slice(0, 10);
 
-  const [logsRes, healthRes, checkinRes, recoveryRes, review, phase] = await Promise.all([
+  const [logsRes, healthRes, checkinRes, recoveryRes, review, phase, sessions] = await Promise.all([
     db
       .from("hrl_logs")
       .select("*")
@@ -87,6 +89,7 @@ export async function buildWeeklyShareText(): Promise<{ text: string; week: stri
     db.from("hrl_recovery").select("*").gte("date", week).lte("date", weekEnd),
     getOrCreateWeeklyReview(),
     getActivePhase(),
+    getResolvedProgram(),
   ]);
 
   const logs = (logsRes.data ?? []) as LogRow[];
@@ -111,7 +114,7 @@ export async function buildWeeklyShareText(): Promise<{ text: string; week: stri
     parts.push("No sessions logged this week.");
   } else {
     for (const row of logs) {
-      if (isSessionLog(row)) parts.push(formatSession(row));
+      if (isSessionLog(row)) parts.push(formatSession(row, sessions));
       else if (isRunLog(row)) parts.push(formatRun(row.data));
       else if (isXtrainLog(row)) parts.push(formatXtrain(row.data));
     }

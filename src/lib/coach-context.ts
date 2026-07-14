@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildCoachAnalysis } from "@/lib/coach-analysis";
 import { cycleContextLine, deriveCycleState, type CycleDay } from "@/lib/cycle";
 import { formatLogAsText } from "@/lib/format";
-import { runTraffic } from "@/lib/program";
+import { PHASE, runTraffic } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
 import {
   isRunLog,
@@ -43,20 +43,191 @@ function daysAgoISO(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Durable memory notes the coach has accumulated. Shared by chat, brief, review.
-export async function fetchMemoryNotes(db: SupabaseClient): Promise<string[]> {
-  const { data } = await db
-    .from("hrl_memory")
-    .select("content")
-    .order("created_at", { ascending: true });
-  return (data ?? []).map((r) => r.content as string);
+// ─── Core context (tool-enabled chat coach) ───────────────────────────────────
+//
+// The chat coach gets a SMALL always-on context and a set of tools, rather than
+// a fixed digest of everything. This block holds only what is true right now and
+// cheap to state — who she is today, where the week stands, the latest readings.
+// Anything historical, per-lift, or trend-shaped is deliberately absent: the
+// coach fetches that itself, so it reads the real series instead of a summary of
+// a summary that was computed once and frozen.
+//
+// buildCoachContext (below) is unchanged and still serves the brief and review.
+
+const mean = (ns: number[]) => (ns.length ? ns.reduce((a, b) => a + b, 0) / ns.length : 0);
+
+function medianOf(ns: number[]): number {
+  if (!ns.length) return 0;
+  const s = [...ns].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-export function memoryBlock(notes: string[]): string {
-  if (!notes.length) return "";
+function mondayISO(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+export async function buildCoachCore(): Promise<string> {
+  const db = supabase();
+  const monday = mondayISO();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [weekRes, checkinRes, healthRes, hrvRes, recoveryRes, cycleRes, profileRes, decisions, lastRunRes] =
+    await Promise.all([
+      db.from("hrl_logs").select("logged_at, kind, session_key").gte("logged_at", monday),
+      db.from("hrl_checkins").select("*").order("date", { ascending: false }).limit(1),
+      db.from("hrl_health").select("*").order("date", { ascending: false }).limit(1),
+      db
+        .from("hrl_health")
+        .select("hrv")
+        .gte("date", daysAgoISO(60))
+        .order("date", { ascending: false }),
+      db.from("hrl_recovery").select("*").order("date", { ascending: false }).limit(1),
+      db
+        .from("hrl_cycle")
+        .select("date, is_period, flow")
+        .gte("date", daysAgoISO(180))
+        .order("date", { ascending: true }),
+      db.from("hrl_profile").select("*").order("status", { ascending: true }).order("created_at", { ascending: true }),
+      fetchOpenDecisions(db),
+      db
+        .from("hrl_logs")
+        .select("*")
+        .eq("kind", "run")
+        .order("logged_at", { ascending: false })
+        .limit(1),
+    ]);
+
+  const week = (weekRes.data ?? []) as { logged_at: string; kind: string; session_key: string | null }[];
+  const sessions = week.filter((w) => w.kind === "session");
+  const runs = week.filter((w) => w.kind === "run");
+  const xtrain = week.filter((w) => w.kind === "xtrain");
+
+  const lines: string[] = [
+    "RIGHT NOW — auto-generated, current as of this message. This is a summary, not the data. You have tools; use them to look at the actual logs, lift histories, run responses, and health series before making a call. Do not answer a question about a trend, a progression, or how something has been going from this block alone — go read it.",
+    `Today: ${today} (week starting ${monday})`,
+    `Current program phase: ${PHASE}`,
+    "",
+    `This week so far: ${sessions.length} strength session(s)${
+      sessions.length ? ` (${sessions.map((s) => s.session_key).filter(Boolean).join(", ")})` : ""
+    }, ${runs.length} run(s), ${xtrain.length} cross-training.`,
+  ];
+
+  const checkin = (checkinRes.data?.[0] ?? null) as Checkin | null;
+  lines.push(
+    checkin
+      ? `Latest readiness check-in: ${checkin.readiness.toUpperCase()} on ${checkin.date}${checkin.note ? ` — "${checkin.note}"` : ""}`
+      : "No readiness check-in recorded.",
+  );
+
+  const health = (healthRes.data?.[0] ?? null) as HealthRow | null;
+  if (health) {
+    const bits = [
+      health.sleep_hours != null ? `sleep ${health.sleep_hours}h` : null,
+      health.hrv != null ? `HRV ${health.hrv}` : null,
+      health.resting_hr != null ? `resting HR ${health.resting_hr}` : null,
+      health.steps != null ? `${health.steps} steps` : null,
+    ].filter(Boolean);
+    if (bits.length) lines.push(`Apple Health (${health.date}): ${bits.join(", ")}.`);
+  }
+
+  // Baseline is COMPUTED, never remembered — it moves, and a stale one is worse
+  // than none. Stated here only so a flagged reading is legible at a glance.
+  const hrvs = ((hrvRes.data ?? []) as { hrv: number | null }[])
+    .map((r) => r.hrv)
+    .filter((v): v is number => v != null);
+  if (hrvs.length >= 5) {
+    lines.push(
+      `HRV baseline over the last 60 days: median ${Math.round(medianOf(hrvs))}, last-7 mean ${Math.round(
+        mean(hrvs.slice(0, 7)),
+      )} (n=${hrvs.length}). Judge today's reading against this, not against a remembered number.`,
+    );
+  }
+
+  const recovery = (recoveryRes.data?.[0] ?? null) as {
+    date: string;
+    fueled: boolean | null;
+    post_run_protocol: boolean | null;
+    vipassana: number | null;
+    sleep_quality: number | null;
+  } | null;
+  if (recovery) {
+    const bits = [
+      recovery.fueled != null ? `fueled: ${recovery.fueled ? "yes" : "no"}` : null,
+      recovery.post_run_protocol != null
+        ? `ankle post-run protocol: ${recovery.post_run_protocol ? "done" : "not done"}`
+        : null,
+      recovery.vipassana != null ? `Vipassana: ${recovery.vipassana}/3` : null,
+      recovery.sleep_quality != null ? `sleep quality: ${recovery.sleep_quality}/5` : null,
+    ].filter(Boolean);
+    if (bits.length) lines.push(`Recovery check (${recovery.date}): ${bits.join(", ")}.`);
+  }
+
+  const cycleLine = cycleContextLine(deriveCycleState((cycleRes.data ?? []) as CycleDay[]));
+  if (cycleLine) lines.push(`Menstrual cycle: ${cycleLine}`);
+
+  const lastRun = ((lastRunRes.data ?? []) as LogRow[]).find(isRunLog);
+  if (lastRun) {
+    const t = runTraffic(lastRun.data.run_am_knee, lastRun.data.run_am_ankle);
+    lines.push(
+      `Most recent run: ${lastRun.logged_at}, ${lastRun.data.run_dist || "?"} mi — next-AM signal ${t.light}. Call get_run_history before any volume decision; one run is not a trend.`,
+    );
+  } else {
+    lines.push("No runs logged.");
+  }
+
+  const profile = profileBlock((profileRes.data ?? []) as ProfileEntry[]);
+  const open = decisionsBlock(decisions);
+  return [profile, open, lines.join("\n")].filter(Boolean).join("\n");
+}
+
+// The coach's open decisions. Shared by chat, brief, review, program review.
+//
+// This replaced a flat "persistent memory" list of sentences the model rewrote
+// after every turn. That design stored CONCLUSIONS ("ankle trending up",
+// "baseline HRV ~43") which were true when written and rotted afterward — and
+// rewriting the whole list each turn made it drift besides. Durable facts about
+// her now live in hrl_profile, which she maintains; anything derivable from her
+// data is computed on demand via the coach's tools.
+//
+// What remains worth carrying between sessions is the coach's own reasoning:
+// what it decided, why, and what would change its mind. That is append-only, so
+// it cannot drift, and it is small enough to sit in front of the coach on every
+// surface rather than waiting behind a tool call.
+export type OpenDecision = {
+  id: string;
+  created_at: string;
+  decision: string;
+  rationale: string;
+  review_trigger: string | null;
+};
+
+export async function fetchOpenDecisions(db: SupabaseClient): Promise<OpenDecision[]> {
+  const { data } = await db
+    .from("hrl_decisions")
+    .select("id, created_at, decision, rationale, review_trigger")
+    .eq("status", "open")
+    .order("created_at", { ascending: true });
+  return (data ?? []) as OpenDecision[];
+}
+
+export function decisionsBlock(decisions: OpenDecision[]): string {
+  if (!decisions.length) return "";
+  const days = (iso: string) =>
+    Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000));
   return [
-    "PERSISTENT MEMORY — durable facts you have saved about the athlete across past conversations. Treat as current unless something in this session contradicts it.",
-    ...notes.map((n) => `- ${n}`),
+    "YOUR OPEN DECISIONS — calls you made in earlier sessions that are still standing. This is your own reasoning, not a fact about her. Pick these threads back up: if a review trigger has been met, go check the data and close it with close_decision. If one is stale or was overtaken by events, close it honestly. Do not silently contradict an open decision — if you are changing your mind, say so and close it.",
+    ...decisions.map((d) =>
+      [
+        `- [${d.id}] ${d.decision} (made ${days(d.created_at)}d ago)`,
+        `    why: ${d.rationale}`,
+        d.review_trigger ? `    revisit when: ${d.review_trigger}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    ),
     "",
   ].join("\n");
 }
@@ -73,7 +244,7 @@ export async function buildCoachContext(): Promise<{
 
   const cycleSince = daysAgoISO(180);
   const trendSince = daysAgoISO(28);
-  const [logsRes, checkinRes, memory, healthRes, ovrRes, recoveryRes, cycleRes, trendRes, profileRes] =
+  const [logsRes, checkinRes, decisions, healthRes, ovrRes, recoveryRes, cycleRes, trendRes, profileRes] =
     await Promise.all([
       db
         .from("hrl_logs")
@@ -83,7 +254,7 @@ export async function buildCoachContext(): Promise<{
         .order("created_at", { ascending: false })
         .limit(40),
       db.from("hrl_checkins").select("*").order("date", { ascending: false }).limit(1),
-      fetchMemoryNotes(db),
+      fetchOpenDecisions(db),
       db.from("hrl_health").select("*").order("date", { ascending: false }).limit(14),
       db.from("hrl_program_overrides").select("exercise_id, target, note"),
       db.from("hrl_recovery").select("*").order("date", { ascending: false }).limit(1),
@@ -202,7 +373,7 @@ export async function buildCoachContext(): Promise<{
     lines.push("", "No logs in the window yet.");
   }
 
-  const mem = memoryBlock(memory);
+  const open = decisionsBlock(decisions);
   const profile = profileBlock((profileRes.data ?? []) as ProfileEntry[]);
   const analysis = buildCoachAnalysis(
     (trendRes.data ?? []) as LogRow[],
@@ -210,7 +381,7 @@ export async function buildCoachContext(): Promise<{
   );
   const blockBody = `${lines.join("\n")}\n\n${analysis}`;
   return {
-    block: [profile, mem, blockBody].filter(Boolean).join("\n"),
+    block: [profile, open, blockBody].filter(Boolean).join("\n"),
     summary: {
       sessionCount,
       runStatus: traffic?.light ?? null,

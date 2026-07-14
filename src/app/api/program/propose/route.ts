@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { checkAuth, errorResponse } from "@/lib/auth";
-import { fetchMemoryNotes, memoryBlock } from "@/lib/coach-context";
+import { decisionsBlock, fetchOpenDecisions } from "@/lib/coach-context";
 import { SESSIONS, SESSION_ORDER } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
 import { SYSTEM_PROMPT } from "@/lib/system-prompt";
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const since = new Date();
     since.setDate(since.getDate() - LOOKBACK_DAYS);
 
-    const [logsRes, ovrRes, memory] = await Promise.all([
+    const [logsRes, ovrRes, decisions] = await Promise.all([
       db
         .from("hrl_logs")
         .select("*")
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
         .order("logged_at", { ascending: false })
         .limit(80),
       db.from("hrl_program_overrides").select("*"),
-      fetchMemoryNotes(db),
+      fetchOpenDecisions(db),
     ]);
     const logs = (logsRes.data ?? []) as LogRow[];
     const overrides = new Map(
@@ -83,11 +83,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ proposals: [], reason: "no logged lifts yet" });
     }
 
-    const mem = memoryBlock(memory);
+    const open = decisionsBlock(decisions);
     const system: Anthropic.TextBlockParam[] = [
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
     ];
-    if (mem) system.push({ type: "text", text: mem });
+    if (open) system.push({ type: "text", text: open });
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-6",

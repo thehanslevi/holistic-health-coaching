@@ -153,6 +153,12 @@ export type Phase = {
   ended_on: string | null;
   status: "active" | "archived";
   created_at: string;
+  /**
+   * The phase's full program (Record<SessionKey, Session>) once anything has
+   * been edited. Null/absent = unedited; fall back to program.ts SESSIONS.
+   * Typed loose here so the client-safe resolver owns validation.
+   */
+  program_snapshot?: unknown;
 };
 
 // ─── Living profile — user-maintained current status (overrides stale context) ─
