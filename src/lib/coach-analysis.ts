@@ -92,6 +92,11 @@ export function buildCoachAnalysis(logs: LogRow[], health: HealthRow[]): string 
   }
 
   // ── Adherence + the muscle-protection lens ──
+  //
+  // The clinical reason this threshold exists is personal medical context and
+  // lives in the private system prompt (COACH_SYSTEM_PROMPT), never in this
+  // repo — the repo is public. This file only computes and flags; the coach
+  // supplies the why from its own background.
   const sessionsThisWeek = logs.filter(
     (l) => isSessionLog(l) && mondayOf(l.logged_at) === thisWeek,
   ).length;
@@ -102,7 +107,7 @@ export function buildCoachAnalysis(logs: LogRow[], health: HealthRow[]): string 
   );
   if (sessionsThisWeek > 0 && sessionsThisWeek < 3) {
     out.push(
-      "- MUSCLE-PROTECTION FLAG: under 3 lifting sessions this week is below the muscle-protection threshold given her medical context. This matters more than any single lift number.",
+      "- MUSCLE-PROTECTION FLAG: under 3 lifting sessions this week is below the lean-mass protection threshold that applies given her medical context — see the standing guidance in your background profile. This matters more than any single lift number.",
     );
   }
 
