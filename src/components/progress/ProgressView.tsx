@@ -15,6 +15,7 @@ import { Button, Card, Dots, EmptyState, SectionLabel, inputClass } from "@/comp
 import { BarChart, LineChart } from "@/components/progress/charts";
 import { useApp } from "@/components/AppShell";
 import ShareWeek from "@/components/ShareWeek";
+import ExportData from "@/components/ExportData";
 
 function WeekReview() {
   const [content, setContent] = useState<string | null>(null);
@@ -216,6 +217,12 @@ export default function ProgressView() {
               <div className="text-xs text-faint py-4">Zone 2, swims, and walks land here.</div>
             )}
           </Card>
+        </div>
+      )}
+
+      {!nothingYet && (
+        <div className="mt-5">
+          <ExportData />
         </div>
       )}
     </div>
