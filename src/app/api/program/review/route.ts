@@ -7,6 +7,7 @@ import { SESSIONS, SESSION_ORDER } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
 import { SYSTEM_PROMPT } from "@/lib/system-prompt";
 import { isSessionLog, type HealthRow, type LogRow, type ProgramOverride } from "@/lib/types";
+import { todayISO } from "@/lib/day";
 
 const client = new Anthropic();
 
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = supabase();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     const refresh = new URL(req.url).searchParams.get("refresh") === "1";
 
     if (!refresh) {

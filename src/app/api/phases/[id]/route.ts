@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkAuth, errorResponse } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { Phase } from "@/lib/types";
+import { todayISO } from "@/lib/day";
 
 type OverrideSnap = { exercise_id: string; target: string | null; note: string | null };
 
@@ -34,7 +35,7 @@ export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/phases/[id
             .select("exercise_id, target, note");
           await db
             .from("hrl_phases")
-            .update({ status: "archived", overrides_snapshot: ovr ?? [], ended_on: new Date().toISOString().slice(0, 10) })
+            .update({ status: "archived", overrides_snapshot: ovr ?? [], ended_on: todayISO() })
             .eq("id", active.id);
         }
         await db.from("hrl_phases").update({ status: "active", ended_on: null }).eq("id", id);

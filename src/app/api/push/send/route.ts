@@ -5,6 +5,7 @@ import { getOrCreateDailyBrief } from "@/lib/brief";
 import { supabase } from "@/lib/supabase";
 import type { LogRow } from "@/lib/types";
 import { sendPushToAll, type PushPayload } from "@/lib/push";
+import { todayISO } from "@/lib/day";
 
 // Daily morning push. Triggered by Vercel Cron (see vercel.json). Composes the
 // notification from the coach's brief + any pending run-scoring reminder, then
@@ -73,7 +74,7 @@ export async function GET(req: NextRequest) {
     const body = parts.join("\n\n").trim() ||
       "Open Volt to check in and see today's plan.";
 
-    const dow = WEEKDAYS[new Date().getDay()];
+    const dow = WEEKDAYS[new Date(`${todayISO()}T12:00:00Z`).getUTCDay()];
     const payload: PushPayload = {
       title: `Coach · ${dow} morning`,
       body,

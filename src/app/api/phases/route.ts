@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkAuth, errorResponse } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { Phase } from "@/lib/types";
+import { todayISO } from "@/lib/day";
 
 // GET → the active phase + archived history.
 export async function GET(req: NextRequest) {
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "A phase name is required." }, { status: 400 });
     }
     const focus = (body?.focus as string)?.trim() || null;
-    const startedOn = (body?.started_on as string) || new Date().toISOString().slice(0, 10);
+    const startedOn = (body?.started_on as string) || todayISO();
     const carry: "keep" | "reset" | "propose" = body?.carry ?? "keep";
 
     const db = supabase();

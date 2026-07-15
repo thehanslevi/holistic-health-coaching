@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkAuth, errorResponse } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { todayISO } from "@/lib/day";
 
 const FIELDS = ["fueled", "post_run_protocol", "vipassana", "sleep_quality", "note"] as const;
 
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (unauthorized) return unauthorized;
   try {
     const body = await req.json();
-    const date = (body?.date as string) || new Date().toISOString().slice(0, 10);
+    const date = (body?.date as string) || todayISO();
     const row: Record<string, unknown> = { date, updated_at: new Date().toISOString() };
     for (const f of FIELDS) if (body?.[f] !== undefined) row[f] = body[f];
     const { data, error } = await supabase()

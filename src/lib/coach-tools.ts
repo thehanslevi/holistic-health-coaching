@@ -1,4 +1,5 @@
 import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
+import { daysAgoISO } from "@/lib/day";
 import { formatLogAsText } from "@/lib/format";
 import { SESSIONS, SESSION_ORDER, WEEKLY_SCHEDULE, runTraffic, type SessionKey } from "@/lib/program";
 import { catalogOf, findExerciseIn } from "@/lib/program-resolve";
@@ -36,11 +37,7 @@ const median = (ns: number[]): number => {
 const mean = (ns: number[]): number =>
   ns.length ? ns.reduce((a, b) => a + b, 0) / ns.length : 0;
 
-function daysAgoISO(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
+// Dates resolve in the athlete's timezone, not the server's — see lib/day.ts.
 
 // Cosmetic, sync, base-template only — used for the "Pulling your X history…"
 // status line. A coach-added exercise simply misses and falls back to generic

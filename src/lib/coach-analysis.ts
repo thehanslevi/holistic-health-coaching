@@ -6,6 +6,7 @@ import {
 } from "@/lib/analytics";
 import { runTraffic } from "@/lib/program";
 import { isSessionLog, type HealthRow, type LogRow } from "@/lib/types";
+import { mondayOf } from "@/lib/day";
 
 // Pre-computes the findings a coach's eye catches — trends, mismatches, flags —
 // so the model can INTERPRET and PRESCRIBE instead of reading the log back. This
@@ -24,18 +25,12 @@ const LOWER_IDS = new Set([
 
 const avg = (ns: number[]) => ns.reduce((a, b) => a + b, 0) / ns.length;
 
-function mondayOf(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00");
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return d.toISOString().slice(0, 10);
-}
-
 /**
  * A structured findings packet for the coach to interpret. Not shown to the
  * athlete — it's the analytical substrate behind the brief and weekly review.
  */
 export function buildCoachAnalysis(logs: LogRow[], health: HealthRow[]): string {
-  const thisWeek = mondayOf(new Date().toISOString().slice(0, 10));
+  const thisWeek = mondayOf();
   const out: string[] = [
     "COMPUTED ANALYSIS — findings from her own data. Interpret and prioritize these; do NOT read them back to her. She already knows her numbers. Your job is what they mean and what to do.",
   ];

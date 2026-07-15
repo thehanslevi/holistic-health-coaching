@@ -2,12 +2,7 @@ import { runCoach } from "@/lib/coach-run";
 import { COACH_UNATTENDED_TOOLS } from "@/lib/coach-tools";
 import { supabase } from "@/lib/supabase";
 import type { LogRow } from "@/lib/types";
-
-export function mondayOf(d: Date): string {
-  const m = new Date(d);
-  m.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return m.toISOString().slice(0, 10);
-}
+import { daysAfterISO, mondayOf } from "@/lib/day";
 
 // Coach-written weekly review, cached per week (hrl_briefs kind=weekly).
 // Shared by GET /api/review (Progress screen) and the share-with-coach export.
@@ -15,7 +10,7 @@ export async function getOrCreateWeeklyReview(
   forceRefresh = false,
 ): Promise<{ content: string; week: string; cached: boolean; empty?: boolean }> {
   const db = supabase();
-  const week = mondayOf(new Date());
+  const week = mondayOf();
 
   if (!forceRefresh) {
     const { data } = await db
@@ -27,9 +22,7 @@ export async function getOrCreateWeeklyReview(
     if (data) return { content: data.content, week, cached: true };
   }
 
-  const weekEnd = new Date(week + "T00:00:00");
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  const weekEndISO = weekEnd.toISOString().slice(0, 10);
+  const weekEndISO = daysAfterISO(6, week);
 
   // Only needed to answer "did she train at all this week" — the coach pulls the
   // history it actually wants through its own tools, over whatever window the

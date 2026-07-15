@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildCoachAnalysis } from "@/lib/coach-analysis";
 import { cycleContextLine, deriveCycleState, type CycleDay } from "@/lib/cycle";
 import { formatLogAsText } from "@/lib/format";
+import { daysAgoISO, mondayOf, todayISO } from "@/lib/day";
 import { PHASE, runTraffic } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
 import {
@@ -37,11 +38,7 @@ export function profileBlock(entries: ProfileEntry[]): string {
 const WINDOW_DAYS = 14;
 const MAX_CONTEXT_CHARS = 9000;
 
-function daysAgoISO(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
+// Dates resolve in the athlete's timezone, not the server's — see lib/day.ts.
 
 // ─── Core context (tool-enabled chat coach) ───────────────────────────────────
 //
@@ -63,16 +60,10 @@ function medianOf(ns: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-function mondayISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return d.toISOString().slice(0, 10);
-}
-
 export async function buildCoachCore(): Promise<string> {
   const db = supabase();
-  const monday = mondayISO();
-  const today = new Date().toISOString().slice(0, 10);
+  const monday = mondayOf();
+  const today = todayISO();
 
   const [weekRes, checkinRes, healthRes, hrvRes, recoveryRes, cycleRes, profileRes, decisions, lastRunRes] =
     await Promise.all([
@@ -294,7 +285,7 @@ export async function buildCoachContext(): Promise<{
 
   const lines: string[] = [
     `DYNAMIC CONTEXT — auto-generated from the athlete's tracker (last ${WINDOW_DAYS} days). Read before responding; takes precedence over defaults.`,
-    `Current date: ${new Date().toISOString().slice(0, 10)}`,
+    `Current date: ${todayISO()}`,
     latestCheckin
       ? `Latest readiness check-in: ${latestCheckin.readiness.toUpperCase()} on ${latestCheckin.date}${latestCheckin.note ? ` — "${latestCheckin.note}"` : ""}`
       : "No readiness check-ins recorded.",

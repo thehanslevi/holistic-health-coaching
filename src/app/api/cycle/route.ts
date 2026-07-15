@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkAuth, errorResponse } from "@/lib/auth";
 import { deriveCycleState, type CycleDay } from "@/lib/cycle";
 import { supabase } from "@/lib/supabase";
+import { todayISO } from "@/lib/day";
 
 // GET → derived cycle state (phase, ~day, approximate) plus recent period days.
 export async function GET(req: NextRequest) {
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (unauthorized) return unauthorized;
   try {
     const body = await req.json().catch(() => ({}));
-    const date = (body?.date as string) || new Date().toISOString().slice(0, 10);
+    const date = (body?.date as string) || todayISO();
     const row = {
       date,
       is_period: body?.is_period ?? true,

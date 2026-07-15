@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkAuth, errorResponse } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { todayISO } from "@/lib/day";
 
 const NUM_FIELDS = ["sleep_hours", "steps", "resting_hr", "hrv", "active_energy"] as const;
 type NumField = (typeof NUM_FIELDS)[number];
@@ -267,7 +268,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Flat single-day fallback (legacy Shortcut style).
-    const date = (body?.date as string) || new Date().toISOString().slice(0, 10);
+    const date = (body?.date as string) || todayISO();
     const row: Record<string, unknown> = {
       date,
       source: body?.source || "shortcut",

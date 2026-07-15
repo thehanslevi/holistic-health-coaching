@@ -1,4 +1,5 @@
-import { getOrCreateWeeklyReview, mondayOf } from "@/lib/review";
+import { mondayOf } from "@/lib/day";
+import { getOrCreateWeeklyReview } from "@/lib/review";
 import { SESSIONS, runTraffic, type SessionKey } from "@/lib/program";
 import type { ProgramSessions } from "@/lib/program-resolve";
 import { getResolvedProgram } from "@/lib/program-server";
@@ -72,7 +73,7 @@ function formatXtrain(d: import("@/lib/types").XtrainLogData): string {
 // Assemble the full plain-text weekly report to hand a coach or PT.
 export async function buildWeeklyShareText(): Promise<{ text: string; week: string }> {
   const db = supabase();
-  const week = mondayOf(new Date());
+  const week = mondayOf();
   const weekEndD = new Date(week + "T00:00:00");
   weekEndD.setDate(weekEndD.getDate() + 6);
   const weekEnd = weekEndD.toISOString().slice(0, 10);

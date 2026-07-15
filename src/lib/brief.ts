@@ -2,6 +2,7 @@ import { runCoach } from "@/lib/coach-run";
 import { COACH_UNATTENDED_TOOLS } from "@/lib/coach-tools";
 import { WEEKLY_SCHEDULE } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
+import { todayISO, weekdayIndex } from "@/lib/day";
 
 // The coach's morning brief. Cached per (date, readiness): a new readiness
 // check-in invalidates the cache so the brief reacts to how she's arriving.
@@ -11,7 +12,7 @@ export async function getOrCreateDailyBrief(forceRefresh = false): Promise<{
   cached: boolean;
 }> {
   const db = supabase();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const [briefRes, checkinRes] = await Promise.all([
     db.from("hrl_briefs").select("*").eq("brief_date", today).eq("kind", "daily").maybeSingle(),
@@ -23,7 +24,7 @@ export async function getOrCreateDailyBrief(forceRefresh = false): Promise<{
     return { content: briefRes.data.content, cached: true };
   }
 
-  const dayIdx = (new Date().getDay() + 6) % 7;
+  const dayIdx = weekdayIndex();
   const schedule = WEEKLY_SCHEDULE[dayIdx];
 
   // Same model, thinking, and tools as the chat coach — it goes and looks before
