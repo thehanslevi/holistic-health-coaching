@@ -121,7 +121,26 @@ export async function buildCoachCore(): Promise<string> {
       health.resting_hr != null ? `resting HR ${health.resting_hr}` : null,
       health.steps != null ? `${health.steps} steps` : null,
     ].filter(Boolean);
-    if (bits.length) lines.push(`Apple Health (${health.date}): ${bits.join(", ")}.`);
+    if (bits.length) {
+      // Freshness is load-bearing, and its absence caused a real failure: the
+      // coach read a day-old HRV of 28.7 and told her it had "dropped hard
+      // overnight". The date was right here in the context; nothing said to care.
+      //
+      // Two facts make same-day health data untrustworthy. Her export syncs
+      // sporadically (often late at night, sometimes not before the 8am brief),
+      // so the newest row is frequently yesterday's. And it REVISES past days as
+      // more samples land — that same 28.7 was later corrected to 42.4. A reading
+      // is provisional until the day is over.
+      if (health.date === today) {
+        lines.push(
+          `Apple Health (today, ${health.date}): ${bits.join(", ")}. Today's numbers can still be revised upward as more samples sync, so treat them as provisional — real but not final.`,
+        );
+      } else {
+        lines.push(
+          `Apple Health — the most recent readings are from ${health.date}, which is NOT today (${today}). Today's have not synced yet. These are ${bits.join(", ")}. Do NOT describe them as this morning's, and do NOT say anything "dropped overnight" — you do not know what happened overnight. If today's recovery matters to your answer, say plainly that today's numbers aren't in yet.`,
+        );
+      }
+    }
   }
 
   // Baseline is COMPUTED, never remembered — it moves, and a stale one is worse
