@@ -1,12 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { buildCoachAnalysis } from "@/lib/coach-analysis";
-import { decisionsBlock, fetchOpenDecisions } from "@/lib/coach-context";
-import { formatLogAsText } from "@/lib/format";
+import { runCoach } from "@/lib/coach-run";
+import { COACH_UNATTENDED_TOOLS } from "@/lib/coach-tools";
 import { supabase } from "@/lib/supabase";
-import { SYSTEM_PROMPT } from "@/lib/system-prompt";
-import type { HealthRow, LogRow } from "@/lib/types";
-
-const client = new Anthropic();
+import type { LogRow } from "@/lib/types";
 
 export function mondayOf(d: Date): string {
   const m = new Date(d);
@@ -34,28 +29,18 @@ export async function getOrCreateWeeklyReview(
 
   const weekEnd = new Date(week + "T00:00:00");
   weekEnd.setDate(weekEnd.getDate() + 6);
-  // Trends need history beyond the week; pull ~5 weeks for analysis + health.
-  const trendSince = new Date(week + "T00:00:00");
-  trendSince.setDate(trendSince.getDate() - 28);
-  const [weekRes, trendRes, healthRes] = await Promise.all([
-    db
-      .from("hrl_logs")
-      .select("*")
-      .gte("logged_at", week)
-      .lte("logged_at", weekEnd.toISOString().slice(0, 10))
-      .order("logged_at", { ascending: true }),
-    db
-      .from("hrl_logs")
-      .select("*")
-      .gte("logged_at", trendSince.toISOString().slice(0, 10))
-      .order("logged_at", { ascending: false })
-      .limit(80),
-    db.from("hrl_health").select("*").order("date", { ascending: false }).limit(21),
-  ]);
-  if (weekRes.error) throw new Error(weekRes.error.message);
-  const logs = (weekRes.data ?? []) as LogRow[];
-  const trendLogs = (trendRes.data ?? []) as LogRow[];
-  const health = (healthRes.data ?? []) as HealthRow[];
+  const weekEndISO = weekEnd.toISOString().slice(0, 10);
+
+  // Only needed to answer "did she train at all this week" — the coach pulls the
+  // history it actually wants through its own tools, over whatever window the
+  // question deserves, rather than being handed a fixed 4-week slice.
+  const { data, error } = await db
+    .from("hrl_logs")
+    .select("id")
+    .gte("logged_at", week)
+    .lte("logged_at", weekEndISO);
+  if (error) throw new Error(error.message);
+  const logs = (data ?? []) as Pick<LogRow, "id">[];
 
   if (logs.length === 0) {
     return {
@@ -66,38 +51,25 @@ export async function getOrCreateWeeklyReview(
     };
   }
 
-  const analysis = buildCoachAnalysis(trendLogs, health);
-  const weekLogsText = logs.map((l) => formatLogAsText(l)).join("\n\n");
-  const open = decisionsBlock(await fetchOpenDecisions(db));
+  const content = await runCoach({
+    tools: COACH_UNATTENDED_TOOLS,
+    maxTokens: 16000,
+    prompt: `Write my weekly review as my coach. The week is ${week} to ${weekEndISO}.
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 600,
-    system: [
-      { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-      {
-        type: "text",
-        text: `${open}${analysis}\n\n--- THIS WEEK'S SESSIONS (for reference only, do not recap) ---\n${weekLogsText}`,
-      },
-    ],
-    messages: [
-      {
-        role: "user",
-        content: `Write my weekly review as my coach.
+Go and do the work first. Nothing has been pre-analysed for you and nothing should be — read what you actually need. At minimum that means this week's sessions, how the lifts you care about are really tracking over a window long enough to mean something, how my joints answered any running, and my recovery against my own computed baseline. Look up whatever else the week raises. Several lookups is normal and expected.
 
-This is analysis, not a recap. Do NOT list my numbers back to me. I know what I lifted. Use the computed analysis above.
+Check your open decisions. If one's review trigger has been met, verify it against the data and close it with what actually happened — including if it didn't work. If this review lands on a call you'll hold me to next week, record it.
 
-1. Lead with the ONE or TWO things that actually matter that I might not see myself: a pattern, a mismatch, a risk, or something working and why it's working. If there's a mismatch flag, that is almost certainly your lead.
+Then write the review:
+
+1. Lead with the ONE or TWO things that actually matter that I could not see myself — a pattern, a mismatch, a risk, or something working and WHY it's working. Something that took your looking to find.
 2. Then a short, specific, prioritized plan for next week with the reasoning: what to push, what to hold, what to protect, and why.
-3. Sound like a specialist, not a generalist. Ground it in real methodology (concurrent-training high-low, tendon loading, muscle protection on the medication, autoregulation, double progression) without lecturing.
+3. Sound like a specialist, not a generalist. Ground it in real methodology (concurrent-training high-low, tendon loading, protecting lean mass given my medical context, autoregulation, double progression) without lecturing.
+
+This is analysis, not a recap. Do NOT list my numbers back to me — I know what I lifted. Do not say what you looked up or narrate your process; just tell me what it means.
 
 Plain prose, no headers, no lists, no preamble. 120 to 180 words. Obey the voice and banned-word rules in your instructions.`,
-      },
-    ],
   });
-
-  const content =
-    response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
   if (content) {
     await db
       .from("hrl_briefs")

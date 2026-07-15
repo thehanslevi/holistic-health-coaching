@@ -52,11 +52,13 @@ function ContextIndicator() {
   }, [logs]); // refresh when logs change
 
   if (!summary) return null;
+  // Used to read "Coach sees: last 14 days · N sessions". That stopped being
+  // true the moment the coach got tools — it now reads whatever window the
+  // question deserves, all the way back, and computes baselines fresh. Claiming
+  // a 14-day horizon undersold it and, worse, was simply wrong.
   return (
     <div className="flex items-center gap-2 text-[11px] text-faint px-1 pb-2">
-      <span>
-        Coach sees: last {summary.sinceDays} days · {summary.sessionCount} sessions
-      </span>
+      <span>Coach reads your full training and health history</span>
       {summary.runStatus && <TrafficLight light={summary.runStatus} label={`run ${summary.runStatus}`} />}
     </div>
   );

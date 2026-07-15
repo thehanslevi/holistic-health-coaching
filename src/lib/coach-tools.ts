@@ -655,18 +655,25 @@ const getDecisionHistory = betaTool({
 
 // Order is fixed and module-level: tools render ahead of the system prompt in
 // the cache prefix, so any reshuffle here invalidates the cached prompt.
-export const COACH_TOOLS = [
-  queryLogs,
-  getExerciseProgression,
-  getRunHistory,
-  getHealthSeries,
-  getProgram,
-  editProgram,
-  setExerciseTarget,
-  recordDecision,
-  closeDecision,
-  getDecisionHistory,
-];
+const READ_TOOLS = [queryLogs, getExerciseProgression, getRunHistory, getHealthSeries, getProgram];
+const WRITE_TOOLS = [editProgram, setExerciseTarget];
+const JOURNAL_TOOLS = [recordDecision, closeDecision, getDecisionHistory];
+
+/** Chat. She's present, sees the reasoning, and can answer back. Everything on. */
+export const COACH_TOOLS = [...READ_TOOLS, ...WRITE_TOOLS, ...JOURNAL_TOOLS];
+
+/**
+ * The unattended surfaces — the 8am brief and the weekly review. These run on a
+ * cron with nobody in the room.
+ *
+ * Reads and the decision journal, but deliberately NO program writes. She okayed
+ * the coach editing her program unprompted, and it does — in conversation, where
+ * she can see why and push back in the same breath. A cron job silently
+ * restructuring her training while she sleeps is a different thing, and not what
+ * she agreed to. If the brief thinks a change is warranted it can say so and she
+ * can say go.
+ */
+export const COACH_UNATTENDED_TOOLS = [...READ_TOOLS, ...JOURNAL_TOOLS];
 
 /** What to show her while the coach is off looking something up. */
 export function toolStatusLabel(name: string, input: unknown): string {

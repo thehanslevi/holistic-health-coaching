@@ -1,15 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { buildCoachContext } from "@/lib/coach-context";
+import { runCoach } from "@/lib/coach-run";
+import { COACH_UNATTENDED_TOOLS } from "@/lib/coach-tools";
 import { WEEKLY_SCHEDULE } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
-import { SYSTEM_PROMPT } from "@/lib/system-prompt";
-
-const client = new Anthropic();
 
 // The coach's morning brief. Cached per (date, readiness): a new readiness
 // check-in invalidates the cache so the brief reacts to how she's arriving.
 // Shared by GET /api/brief (Today screen) and the daily push sender.
-export async function getOrCreateDailyBrief(): Promise<{
+export async function getOrCreateDailyBrief(forceRefresh = false): Promise<{
   content: string;
   cached: boolean;
 }> {
@@ -22,33 +19,37 @@ export async function getOrCreateDailyBrief(): Promise<{
   ]);
   const readiness: string | null = checkinRes.data?.readiness ?? null;
 
-  if (briefRes.data && briefRes.data.readiness === readiness) {
+  if (!forceRefresh && briefRes.data && briefRes.data.readiness === readiness) {
     return { content: briefRes.data.content, cached: true };
   }
 
-  const context = await buildCoachContext(); // block already includes the computed analysis
   const dayIdx = (new Date().getDay() + 6) % 7;
   const schedule = WEEKLY_SCHEDULE[dayIdx];
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 300,
-    system: [
-      { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-      { type: "text", text: context.block },
-    ],
-    messages: [
-      {
-        role: "user",
-        content: `Write my morning brief for today. Today's scheduled slot: "${schedule.label}". My readiness check-in today: ${readiness ?? "not recorded yet"}.
+  // Same model, thinking, and tools as the chat coach — it goes and looks before
+  // it writes, instead of paraphrasing a digest someone else pre-chewed for it.
+  const content = await runCoach({
+    tools: COACH_UNATTENDED_TOOLS,
+    maxTokens: 8000,
+    prompt: `Write my morning brief for today. Today's scheduled slot: "${schedule.label}". My readiness check-in today: ${readiness ?? "not recorded yet"}.
 
-Rules: 1 to 2 short sentences, the single most useful thing for me today. Use the computed analysis to say something real and specific: a call for today's session, a heads-up tied to a pattern or mismatch, or the one thing to prioritize or protect. Not a generic line, and not a recap of numbers I already know. If there is little or no recent training, DO NOT mention that or refer to logs, data, or a "blank slate" in any way; just give me one concrete, useful line for today. If readiness is yellow or red, lead with what to change. If it is Shabbat, one plain line about resting. Plain text only, no preamble. Obey the voice and banned-word rules in your instructions.`,
-      },
-    ],
+Go look first. The block above is a summary, not the data — check whatever actually bears on today before you write a word. Usually that means how the week is really going, how my joints answered the last thing that loaded them, my recovery against my own baseline rather than a remembered number, and any open decision of yours that's now due. Two or three lookups is normal. Do not write this from the summary alone.
+
+If a decision of yours is due or overtaken, close it (close_decision) and let that drive today's line. If today's call is one you'll want to hold me to for more than today, record it (record_decision).
+
+Then write the brief itself.
+
+LENGTH IS A HARD CONSTRAINT: 40 words maximum, two sentences maximum. This is a push notification — it lands on my lock screen, and everything past roughly the first line is cut off and never read. A brilliant third sentence is a wasted one. All that digging you just did earns you ONE call, said in the fewest words that still land it. Cut the reasoning, keep the instruction.
+
+- The single most useful thing for me today, nothing else.
+- It must be something I could not have worked out by glancing at my own screen. A call for today's session, a real heads-up, or the one thing to prioritize or protect.
+- No recap of numbers I already know. No generic encouragement.
+- If readiness is yellow or red, lead with what to change.
+- If there is little or no recent training, DO NOT mention that, and do not refer to logs, data, or a "blank slate" in any way. Just give me one concrete, useful line for today.
+- If it is Shabbat, one plain line about resting.
+
+Plain text only. No preamble, no headers, no lists. Return only the brief — nothing about what you looked up. Obey the voice and banned-word rules in your instructions.`,
   });
-
-  const content =
-    response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
   if (content) {
     await db
       .from("hrl_briefs")
