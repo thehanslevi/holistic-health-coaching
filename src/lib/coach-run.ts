@@ -21,6 +21,19 @@ type CoachToolset = typeof COACH_TOOLS | typeof COACH_UNATTENDED_TOOLS;
 // This is the non-streaming counterpart to the chat route: same model, same
 // thinking, same tools, run to completion instead of streamed.
 
+const MODEL = "claude-opus-4-8";
+
+/** What the coach saw and did, kept so a wrong answer can be explained. */
+export type CoachRun = {
+  text: string;
+  /** Everything it was told before it did anything. */
+  context: string;
+  /** What it went and read, in the order it read it. */
+  lookups: { name: string; input: unknown }[];
+  model: string;
+  generated_at: string;
+};
+
 export async function runCoach({
   prompt,
   tools,
@@ -38,11 +51,12 @@ export async function runCoach({
   maxTokens?: number;
   /** Surface-specific context appended after the shared core. */
   extraContext?: string;
-}): Promise<string> {
+}): Promise<CoachRun> {
   const core = await buildCoachCore();
+  const context = extraContext ? `${core}\n\n${extraContext}` : core;
 
-  const message = await client.beta.messages.toolRunner({
-    model: "claude-opus-4-8",
+  const runner = client.beta.messages.toolRunner({
+    model: MODEL,
     max_tokens: maxTokens,
     thinking: { type: "adaptive" },
     output_config: { effort: "high" },
@@ -56,17 +70,28 @@ export async function runCoach({
         text: SYSTEM_PROMPT,
         cache_control: { type: "ephemeral" },
       },
-      {
-        type: "text",
-        text: extraContext ? `${core}\n\n${extraContext}` : core,
-      },
+      { type: "text", text: context },
     ],
     messages: [{ role: "user", content: prompt }],
   });
 
-  return message.content
+  // Iterated rather than awaited so the lookups can be captured on the way past.
+  // Iteration ends when the coach stops calling tools, and the last message it
+  // yields is the final answer.
+  const lookups: { name: string; input: unknown }[] = [];
+  let final: Anthropic.Beta.BetaMessage | undefined;
+  for await (const message of runner) {
+    final = message;
+    for (const block of message.content) {
+      if (block.type === "tool_use") lookups.push({ name: block.name, input: block.input });
+    }
+  }
+
+  const text = (final?.content ?? [])
     .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
     .map((b) => b.text)
     .join("")
     .trim();
+
+  return { text, context, lookups, model: MODEL, generated_at: new Date().toISOString() };
 }

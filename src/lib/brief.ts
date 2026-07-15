@@ -7,9 +7,17 @@ import { todayISO, weekdayIndex } from "@/lib/day";
 // The coach's morning brief. Cached per (date, readiness): a new readiness
 // check-in invalidates the cache so the brief reacts to how she's arriving.
 // Shared by GET /api/brief (Today screen) and the daily push sender.
+export type BriefInputs = {
+  generated_at: string;
+  model: string;
+  context: string;
+  lookups: { name: string; input: unknown }[];
+};
+
 export async function getOrCreateDailyBrief(forceRefresh = false): Promise<{
   content: string;
   cached: boolean;
+  inputs: BriefInputs | null;
 }> {
   const db = supabase();
   const today = todayISO();
@@ -21,7 +29,7 @@ export async function getOrCreateDailyBrief(forceRefresh = false): Promise<{
   const readiness: string | null = checkinRes.data?.readiness ?? null;
 
   if (!forceRefresh && briefRes.data && briefRes.data.readiness === readiness) {
-    return { content: briefRes.data.content, cached: true };
+    return { content: briefRes.data.content, cached: true, inputs: (briefRes.data.inputs ?? null) as BriefInputs | null };
   }
 
   const dayIdx = weekdayIndex();
@@ -29,7 +37,7 @@ export async function getOrCreateDailyBrief(forceRefresh = false): Promise<{
 
   // Same model, thinking, and tools as the chat coach — it goes and looks before
   // it writes, instead of paraphrasing a digest someone else pre-chewed for it.
-  const content = await runCoach({
+  const run = await runCoach({
     tools: COACH_UNATTENDED_TOOLS,
     maxTokens: 8000,
     prompt: `Write my morning brief for today. Today's scheduled slot: "${schedule.label}". My readiness check-in today: ${readiness ?? "not recorded yet"}.
@@ -51,13 +59,23 @@ LENGTH IS A HARD CONSTRAINT: 40 words maximum, two sentences maximum. This is a 
 
 Plain text only. No preamble, no headers, no lists. Return only the brief — nothing about what you looked up. Obey the voice and banned-word rules in your instructions.`,
   });
+  const { text: content } = run;
   if (content) {
-    await db
-      .from("hrl_briefs")
-      .upsert(
-        { brief_date: today, kind: "daily", readiness, content },
-        { onConflict: "brief_date,kind" },
-      );
+    await db.from("hrl_briefs").upsert(
+      {
+        brief_date: today,
+        kind: "daily",
+        readiness,
+        content,
+        // What it saw, so "why did it say that?" is answerable later.
+        inputs: { generated_at: run.generated_at, model: run.model, context: run.context, lookups: run.lookups },
+      },
+      { onConflict: "brief_date,kind" },
+    );
   }
-  return { content, cached: false };
+  return {
+    content,
+    cached: false,
+    inputs: { generated_at: run.generated_at, model: run.model, context: run.context, lookups: run.lookups },
+  };
 }

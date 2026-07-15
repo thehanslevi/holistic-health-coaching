@@ -44,7 +44,7 @@ export async function getOrCreateWeeklyReview(
     };
   }
 
-  const content = await runCoach({
+  const run = await runCoach({
     tools: COACH_UNATTENDED_TOOLS,
     maxTokens: 16000,
     prompt: `Write my weekly review as my coach. The week is ${week} to ${weekEndISO}.
@@ -63,13 +63,18 @@ This is analysis, not a recap. Do NOT list my numbers back to me — I know what
 
 Plain prose, no headers, no lists, no preamble. 120 to 180 words. Obey the voice and banned-word rules in your instructions.`,
   });
+  const { text: content } = run;
   if (content) {
-    await db
-      .from("hrl_briefs")
-      .upsert(
-        { brief_date: week, kind: "weekly", readiness: null, content },
-        { onConflict: "brief_date,kind" },
-      );
+    await db.from("hrl_briefs").upsert(
+      {
+        brief_date: week,
+        kind: "weekly",
+        readiness: null,
+        content,
+        inputs: { generated_at: run.generated_at, model: run.model, context: run.context, lookups: run.lookups },
+      },
+      { onConflict: "brief_date,kind" },
+    );
   }
   return { content, week, cached: false };
 }

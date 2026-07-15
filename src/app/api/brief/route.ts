@@ -10,8 +10,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const refresh = new URL(req.url).searchParams.get("refresh") === "1";
-    const { content, cached } = await getOrCreateDailyBrief(refresh);
-    return NextResponse.json({ content, cached });
+    const { content, cached, inputs } = await getOrCreateDailyBrief(refresh);
+    return NextResponse.json({ content, cached, inputs });
   } catch (e) {
     return errorResponse(e);
   }

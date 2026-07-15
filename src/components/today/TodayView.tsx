@@ -21,6 +21,7 @@ import { isRunLog, type Checkin, type HealthRow, type Readiness } from "@/lib/ty
 import type { CycleState } from "@/lib/cycle";
 import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
 import { Button, Dots, inputClass } from "@/components/ui";
+import BriefWhy, { type BriefInputs } from "@/components/today/BriefWhy";
 import { useApp } from "@/components/AppShell";
 import CalendarOverlay from "@/components/today/CalendarOverlay";
 import RecoveryCard from "@/components/today/RecoveryCard";
@@ -122,6 +123,7 @@ export default function TodayView() {
   const { logs, goTrain, setTab } = useApp();
   const [checkin, setCheckin] = useState<Checkin | null | undefined>(undefined);
   const [brief, setBrief] = useState<string | null>(null);
+  const [briefInputs, setBriefInputs] = useState<BriefInputs | null>(null);
   const [briefLoading, setBriefLoading] = useState(false);
   const [calOpen, setCalOpen] = useState(false);
   const [health, setHealth] = useState<HealthRow[]>([]);
@@ -157,9 +159,15 @@ export default function TodayView() {
   // Morning brief — refreshes when readiness changes
   const loadBrief = useCallback(() => {
     setBriefLoading(true);
-    api<{ content: string }>("/api/brief")
-      .then((r) => setBrief(r.content))
-      .catch(() => setBrief(null))
+    api<{ content: string; inputs: BriefInputs | null }>("/api/brief")
+      .then((r) => {
+        setBrief(r.content);
+        setBriefInputs(r.inputs ?? null);
+      })
+      .catch(() => {
+        setBrief(null);
+        setBriefInputs(null);
+      })
       .finally(() => setBriefLoading(false));
   }, []);
 
@@ -393,7 +401,10 @@ export default function TodayView() {
         {briefLoading && !brief ? (
           <Dots />
         ) : brief ? (
-          <div className="text-[14px] leading-relaxed text-muted">{brief}</div>
+          <>
+            <div className="text-[14px] leading-relaxed text-muted">{brief}</div>
+            <BriefWhy inputs={briefInputs} />
+          </>
         ) : (
           <div className="text-[13px] text-faint">
             Brief unavailable — check in above and it regenerates.
