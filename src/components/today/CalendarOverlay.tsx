@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/client";
-import { SESSIONS, WEEKLY_SCHEDULE, runTraffic, type SessionKey } from "@/lib/program";
+import { SESSIONS, runTraffic, type SessionKey } from "@/lib/program";
+import { computeCycle } from "@/lib/analytics";
 import {
   isRunLog,
   isSessionLog,
@@ -216,10 +217,11 @@ function DayDetail({
   onLog: (intent: { type: "session"; sessionKey: string; date: string } | { type: "run"; date: string } | { type: "xtrain"; date: string }) => void;
 }) {
   const d = parse(date);
-  const weekday = (d.getDay() + 6) % 7;
-  const schedule = WEEKLY_SCHEDULE[weekday];
   const dayLogs = logs.filter((l) => l.logged_at === date);
   const isToday = date === todayStr;
+  // Rolling model: no weekday schedule. Suggest the next session in the rotation.
+  const nextKey = computeCycle(logs).nextStrength;
+  const nextSession = SESSIONS[nextKey];
 
   const headline = (row: LogRow): { title: string; sub: string; light?: Light } => {
     if (isSessionLog(row)) {
@@ -273,23 +275,26 @@ function DayDetail({
         <div className="w-9 shrink-0" />
       </div>
 
-      {/* Scheduled */}
-      <div className="border border-line p-3.5 mb-3">
-        <div className="label mb-1.5">Scheduled · {schedule.day}</div>
-        <div className="flex items-center gap-2.5">
-          {schedule.sessionKey && (
+      {/* Suggested next (rolling rotation) — only meaningful looking forward */}
+      {isToday && (
+        <div className="border border-line p-3.5 mb-3">
+          <div className="label mb-1.5">Suggested next</div>
+          <div className="flex items-center gap-2.5">
             <span className="display bg-accent text-accent-ink text-[13px] tracking-[0.06em] px-2 py-0.5">
-              {schedule.sessionKey}
+              {nextKey}
             </span>
-          )}
-          <span className="text-[14px] text-ink font-semibold">{schedule.label}</span>
-        </div>
-        {checkin && (
-          <div className="mt-2.5">
-            <TrafficLight light={checkin.readiness} label={`readiness ${checkin.readiness}`} />
+            <span className="text-[14px] text-ink font-semibold">{nextSession.label}</span>
           </div>
-        )}
-      </div>
+          <div className="text-[11px] text-muted mt-1.5 leading-snug">
+            Next in the rotation — recovery and your knee/ankle have the final say.
+          </div>
+          {checkin && (
+            <div className="mt-2.5">
+              <TrafficLight light={checkin.readiness} label={`readiness ${checkin.readiness}`} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Logged */}
       <div className="label mb-2">Logged · {dayLogs.length}</div>
@@ -320,15 +325,13 @@ function DayDetail({
       {/* Backfill actions */}
       <div className="label mb-2">{isToday ? "Log" : "Log for this day"}</div>
       <div className="space-y-2">
-        {schedule.sessionKey && (
-          <Button
-            size="md"
-            className="w-full"
-            onClick={() => onLog({ type: "session", sessionKey: schedule.sessionKey!, date })}
-          >
-            Start {schedule.sessionKey} session →
-          </Button>
-        )}
+        <Button
+          size="md"
+          className="w-full"
+          onClick={() => onLog({ type: "session", sessionKey: nextKey, date })}
+        >
+          Start {nextKey} session →
+        </Button>
         <div className="grid grid-cols-2 gap-2">
           <Button variant="secondary" size="md" onClick={() => onLog({ type: "run", date })}>
             Log run

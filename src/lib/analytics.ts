@@ -1,4 +1,11 @@
-import { SESSIONS, SESSION_ORDER } from "@/lib/program";
+import {
+  SESSIONS,
+  SESSION_ORDER,
+  SESSION_SEQUENCE,
+  ROLLING_TARGETS,
+  nextStrengthSession,
+  type SessionKey,
+} from "@/lib/program";
 import type { ProgramSessions } from "@/lib/program-resolve";
 import { isRunLog, isSessionLog, isXtrainLog, type LogRow } from "@/lib/types";
 
@@ -389,4 +396,95 @@ export function computeConsistency(
   const thisWeek = hits.filter(Boolean).length;
 
   return { streak, bestStreak: best, thisWeek, active: streak > 0 };
+}
+
+// ─── Rolling cycle ───────────────────────────────────────────────────────────
+//
+// Phase 4 measures training as a rolling ~7–10 day dose, not a fixed calendar
+// week. This reads the shared logs cache and answers two things: how the current
+// cycle is filling in against its targets, and which strength session is next in
+// the rotation (from the last one actually completed — never from the weekday).
+
+export type TrainingCycle = {
+  windowDays: number;
+  strengthDone: number;
+  strengthTarget: number;
+  zone2Done: number;
+  zone2Min: number;
+  zone2Max: number;
+  runsDone: number;
+  runTarget: number;
+  /** Days in the window with nothing logged — a proxy for complete recovery days. */
+  recoveryDays: number;
+  /** Most recent strength session she actually logged (any of L1/U1/L2/U2/G1). */
+  lastStrength: SessionKey | null;
+  lastStrengthDate: string | null;
+  /** Next session in the L1→U1→L2→U2 rotation after the last one completed. */
+  nextStrength: SessionKey;
+  /** Was the most recent strength session a lower day? (Feeds "don't stack lowers".) */
+  lastWasLower: boolean;
+};
+
+const STRENGTH_KEYS = new Set<SessionKey>(["L1", "U1", "L2", "U2", "G1"]);
+const LOWER_KEYS = new Set<SessionKey>(["L1", "L2"]);
+const AEROBIC_RE = /zone\s*2|bike|swim|walk|dance|row|ellip|jog|cardio|cycl/i;
+
+const isoLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+export function computeCycle(logs: LogRow[], now: Date = new Date()): TrainingCycle {
+  const win = ROLLING_TARGETS.windowDays;
+  const windowSet = new Set<string>();
+  for (let i = 0; i < win; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    windowSet.add(isoLocal(d));
+  }
+
+  const inWin = logs.filter((l) => windowSet.has(l.logged_at));
+  const activeDays = new Set(inWin.map((l) => l.logged_at));
+
+  let strengthDone = 0;
+  let zone2Done = 0;
+  let runsDone = 0;
+  for (const row of inWin) {
+    if (isSessionLog(row)) {
+      if (STRENGTH_KEYS.has(row.data.sessionKey as SessionKey)) strengthDone += 1;
+    } else if (isRunLog(row)) {
+      runsDone += 1;
+    } else if (isXtrainLog(row) && AEROBIC_RE.test(row.data.modality)) {
+      zone2Done += 1;
+    }
+  }
+
+  // Rotation continuity comes from the last strength session she actually did,
+  // across all of history — not just this window — so a quiet stretch doesn't
+  // reset her place in the sequence.
+  let lastStrength: SessionKey | null = null;
+  let lastStrengthDate: string | null = null;
+  const sorted = [...logs].sort((a, b) => b.logged_at.localeCompare(a.logged_at));
+  for (const row of sorted) {
+    if (isSessionLog(row) && STRENGTH_KEYS.has(row.data.sessionKey as SessionKey)) {
+      lastStrength = row.data.sessionKey as SessionKey;
+      lastStrengthDate = row.logged_at;
+      break;
+    }
+  }
+  const rotationLast = lastStrength && SESSION_SEQUENCE.includes(lastStrength) ? lastStrength : null;
+
+  return {
+    windowDays: win,
+    strengthDone,
+    strengthTarget: ROLLING_TARGETS.strength,
+    zone2Done,
+    zone2Min: ROLLING_TARGETS.zone2Min,
+    zone2Max: ROLLING_TARGETS.zone2Max,
+    runsDone,
+    runTarget: ROLLING_TARGETS.run,
+    recoveryDays: win - activeDays.size,
+    lastStrength,
+    lastStrengthDate,
+    nextStrength: nextStrengthSession(rotationLast),
+    lastWasLower: !!lastStrength && LOWER_KEYS.has(lastStrength),
+  };
 }

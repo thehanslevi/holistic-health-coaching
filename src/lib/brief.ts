@@ -1,8 +1,16 @@
 import { runCoach } from "@/lib/coach-run";
 import { COACH_UNATTENDED_TOOLS } from "@/lib/coach-tools";
-import { WEEKLY_SCHEDULE } from "@/lib/program";
 import { supabase } from "@/lib/supabase";
-import { todayISO, weekdayIndex } from "@/lib/day";
+import { todayISO } from "@/lib/day";
+
+/** Full weekday name for a YYYY-MM-DD date. Anchored at noon UTC so the calendar
+ *  day is stable regardless of where the code runs. */
+function weekdayName(dateISO: string): string {
+  return new Date(`${dateISO}T12:00:00Z`).toLocaleDateString("en-US", {
+    weekday: "long",
+    timeZone: "UTC",
+  });
+}
 
 // The coach's morning brief. Cached per (date, readiness): a new readiness
 // check-in invalidates the cache so the brief reacts to how she's arriving.
@@ -32,17 +40,16 @@ export async function getOrCreateDailyBrief(forceRefresh = false): Promise<{
     return { content: briefRes.data.content, cached: true, inputs: (briefRes.data.inputs ?? null) as BriefInputs | null };
   }
 
-  const dayIdx = weekdayIndex();
-  const schedule = WEEKLY_SCHEDULE[dayIdx];
+  const today_weekday = weekdayName(today);
 
   // Same model, thinking, and tools as the chat coach — it goes and looks before
   // it writes, instead of paraphrasing a digest someone else pre-chewed for it.
   const run = await runCoach({
     tools: COACH_UNATTENDED_TOOLS,
     maxTokens: 8000,
-    prompt: `Write my morning brief for today. Today's scheduled slot: "${schedule.label}". My readiness check-in today: ${readiness ?? "not recorded yet"}.
+    prompt: `Write my morning brief for today (${today_weekday}). My readiness check-in today: ${readiness ?? "not recorded yet"}.
 
-Go look first. The block above is a summary, not the data — check whatever actually bears on today before you write a word. Usually that means how the week is really going, how my joints answered the last thing that loaded them, my recovery against my own baseline rather than a remembered number, and any open decision of yours that's now due. Two or three lookups is normal. Do not write this from the summary alone.
+There is NO fixed weekday schedule. Recommend today's session from the rolling rotation and how I'm actually recovering — never from what day of the week it is. Go look before you decide: what I've actually completed in the last several days (so you know where I am in the strength rotation and whether I've stacked hard days), how my knee and ankle answered the last thing that loaded them, my recovery against my own baseline, and any open decision of yours that's now due. get_program gives you the rotation, the ~7–10 day cycle targets, and the sequencing rules. Two or three lookups is normal. Do not write this from the summary alone.
 
 If a decision of yours is due or overtaken, close it (close_decision) and let that drive today's line. If today's call is one you'll want to hold me to for more than today, record it (record_decision).
 
@@ -55,7 +62,8 @@ LENGTH IS A HARD CONSTRAINT: 40 words maximum, two sentences maximum. This is a 
 - No recap of numbers I already know. No generic encouragement.
 - If readiness is yellow or red, lead with what to change.
 - If there is little or no recent training, DO NOT mention that, and do not refer to logs, data, or a "blank slate" in any way. Just give me one concrete, useful line for today.
-- If it is Shabbat, one plain line about resting.
+- Name the actual next session when you call one (e.g. "Upper day next" or "easy Zone 2 today"), not a weekday.
+- Saturday defaults to recovery unless I've clearly chosen to train; don't assume Sunday is a rest day — I often resume then.
 
 Plain text only. No preamble, no headers, no lists. Return only the brief — nothing about what you looked up. Obey the voice and banned-word rules in your instructions.`,
   });

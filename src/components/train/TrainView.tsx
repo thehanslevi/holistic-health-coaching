@@ -6,7 +6,6 @@ import {
   PHASE_DATES,
   SESSIONS,
   SESSION_ORDER,
-  WEEKLY_SCHEDULE,
   type SessionKey,
 } from "@/lib/program";
 import { phaseDateRange, phaseLabel } from "@/lib/phase-format";
@@ -71,7 +70,6 @@ export default function TrainView() {
       />
     );
 
-  const todayIdx = (new Date().getDay() + 6) % 7; // MON=0 … SUN=6
 
   return (
     <div className="px-4 pb-6 fade-up">
@@ -182,29 +180,6 @@ export default function TrainView() {
           </Card>
 
           <WeekBalance />
-
-          <SectionLabel>This week</SectionLabel>
-          <Card className="p-1.5">
-            {WEEKLY_SCHEDULE.map((d, i) => (
-              <div
-                key={d.day}
-                className={`flex gap-3 items-baseline px-2.5 py-2 ${
-                  i === todayIdx ? "bg-accent/10" : ""
-                }`}
-              >
-                <span
-                  className={`num text-[11px] font-bold w-9 shrink-0 ${
-                    i === todayIdx ? "text-accent" : "text-faint"
-                  }`}
-                >
-                  {d.day}
-                </span>
-                <span className={`text-xs ${i === todayIdx ? "text-ink" : "text-muted"}`}>
-                  {d.label}
-                </span>
-              </div>
-            ))}
-          </Card>
         </div>
       ) : (
         <HistoryList />

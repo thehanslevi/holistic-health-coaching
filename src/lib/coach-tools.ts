@@ -1,7 +1,15 @@
 import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
 import { daysAgoISO } from "@/lib/day";
 import { formatLogAsText } from "@/lib/format";
-import { SESSIONS, SESSION_ORDER, WEEKLY_SCHEDULE, runTraffic, type SessionKey } from "@/lib/program";
+import {
+  SESSIONS,
+  SESSION_ORDER,
+  SESSION_SEQUENCE,
+  ROLLING_TARGETS,
+  ROLLING_RULES,
+  runTraffic,
+  type SessionKey,
+} from "@/lib/program";
 import { catalogOf, findExerciseIn } from "@/lib/program-resolve";
 import { applyProgramEdit, getResolvedProgram } from "@/lib/program-server";
 import { supabase } from "@/lib/supabase";
@@ -299,7 +307,7 @@ const getHealthSeries = betaTool({
 const getProgram = betaTool({
   name: "get_program",
   description:
-    "Read the prescribed program: the weekly schedule, or the full spec for one session (every exercise with sets, reps, target load, and the coaching note behind it), merged with any current override. Overrides are the active target and beat the base program. Call this when you need to know what she is supposed to be doing, or to look up an exercise_id.",
+    "Read the prescribed program: the rolling training model (session rotation, ~7–10 day cycle targets, and sequencing rules), or the full spec for one session (every exercise with sets, reps, target load, and the coaching note behind it), merged with any current override. Overrides are the active target and beat the base program. Nothing is pinned to a weekday — recommend the next session from the rotation and how she's recovering. Call this when you need to know what she is supposed to be doing, or to look up an exercise_id.",
   inputSchema: {
     type: "object",
     properties: {
@@ -318,12 +326,26 @@ const getProgram = betaTool({
     const program = await getResolvedProgram();
 
     if (!session_key) {
-      const schedule = WEEKLY_SCHEDULE.map((d) => `${d.day}: ${d.label}`).join("\n");
+      const t = ROLLING_TARGETS;
+      const model = [
+        `ROLLING MODEL (no fixed weekdays — recommend the next session from the rotation + how she's recovering)`,
+        ``,
+        `Strength rotation: ${SESSION_SEQUENCE.join(" → ")} (alternates lower/upper). G1 is the optional 4th (glute/accessory). C1 is core, paired with an easy aerobic day.`,
+        ``,
+        `Targets over a rolling ~${t.windowDays}-day cycle:`,
+        `  • ${t.strength} strength sessions (the rotation, plus G1 as the 4th when recovery allows)`,
+        `  • ${t.zone2Min}–${t.zone2Max} easy aerobic (Zone 2) sessions`,
+        `  • ${t.run} run progression when the right ankle is Green`,
+        `  • at least ${t.recovery} complete recovery day; PT/joint-prep throughout`,
+        ``,
+        `Sequencing rules:`,
+        ...ROLLING_RULES.map((r) => `  • ${r}`),
+      ].join("\n");
       const index = catalogOf(program)
         .map((e) => `  ${e.id} — ${e.name} (${e.sessionKey})`)
         .join("\n");
       return truncate(
-        `WEEKLY SCHEDULE\n${schedule}\n\nEXERCISE INDEX (pass an id to get_exercise_progression or edit_program)\n${index}`,
+        `${model}\n\nEXERCISE INDEX (pass an id to get_exercise_progression or edit_program)\n${index}`,
         "program",
       );
     }

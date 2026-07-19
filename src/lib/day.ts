@@ -33,7 +33,7 @@ function at(dateISO: string): Date {
   return new Date(`${dateISO}T12:00:00Z`);
 }
 
-/** Weekday of a calendar date, MON=0 … SUN=6 — matching WEEKLY_SCHEDULE. */
+/** Weekday of a calendar date, MON=0 … SUN=6. */
 export function weekdayIndex(dateISO: string = todayISO()): number {
   return (at(dateISO).getUTCDay() + 6) % 7;
 }

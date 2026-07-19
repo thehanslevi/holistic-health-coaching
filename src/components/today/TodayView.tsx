@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiRaw } from "@/lib/client";
 import {
   computeConsistency,
+  computeCycle,
   cycleSignal,
   featuredLift,
   pendingRuns,
@@ -13,9 +14,9 @@ import {
 } from "@/lib/analytics";
 import {
   SESSIONS,
-  WEEKLY_SCHEDULE,
   runTraffic,
   todayISO,
+  type SessionKey,
 } from "@/lib/program";
 import { isRunLog, type Checkin, type HealthRow, type Readiness } from "@/lib/types";
 import type { CycleState } from "@/lib/cycle";
@@ -131,23 +132,20 @@ export default function TodayView() {
   const now = new Date();
   const today = todayISO();
   const dayIdx = (now.getDay() + 6) % 7;
-  const schedule = WEEKLY_SCHEDULE[dayIdx];
-  const isShabbat = dayIdx === 6;
-  const isRunDay = dayIdx === 5;
+  const isSaturday = dayIdx === 5; // Saturday defaults to recovery unless she chooses otherwise
 
-  // Poster title: the day's mission
-  const titleLines: [string, string] = isShabbat
-    ? ["Shabbat", "Recover"]
-    : isRunDay
-      ? ["Run", "Day"]
-      : schedule.sessionKey
-        ? (SESSIONS[schedule.sessionKey].label.toUpperCase().split(" ").length > 1
-            ? [
-                SESSIONS[schedule.sessionKey].label.split(" ")[0],
-                SESSIONS[schedule.sessionKey].label.split(" ").slice(1).join(" "),
-              ]
-            : [SESSIONS[schedule.sessionKey].label, ""])
-        : ["Train", ""];
+  // No fixed weekday schedule. The masthead points at the next session in the
+  // rolling rotation, computed from what she actually logged — not the weekday.
+  // The coach brief below carries the nuanced call (readiness, joints, spacing).
+  const trainCycle = useMemo(() => computeCycle(logs), [logs]);
+  const posterKey: SessionKey | null = isSaturday ? null : trainCycle.nextStrength;
+
+  // Poster title: the next session (or Recover on a default-recovery Saturday)
+  const posterLabel = posterKey ? SESSIONS[posterKey].label : "Recover";
+  const titleLines: [string, string] =
+    posterLabel.split(" ").length > 1
+      ? [posterLabel.split(" ")[0], posterLabel.split(" ").slice(1).join(" ")]
+      : [posterLabel, ""];
 
   // Readiness
   useEffect(() => {
@@ -238,11 +236,10 @@ export default function TodayView() {
   }, [cycle]);
   const suggestion = useMemo(() => suggestReadiness(health), [health]);
   const pending = useMemo(() => pendingRuns(logs), [logs]);
-  const fuelingDay = !isShabbat; // strength or run day
+  const fuelingDay = !isSaturday; // most days carry a session; Saturday defaults to recovery
 
   const startToday = () => {
-    if (schedule.sessionKey) goTrain({ type: "session", sessionKey: schedule.sessionKey });
-    else if (isRunDay) goTrain({ type: "run" });
+    if (posterKey) goTrain({ type: "session", sessionKey: posterKey });
     else setTab("train");
   };
 
@@ -279,19 +276,15 @@ export default function TodayView() {
         )}
       </h1>
       <div className="flex items-center gap-2.5 mt-3">
-        {schedule.sessionKey && (
+        {posterKey && (
           <span className="display bg-accent text-accent-ink text-[14px] tracking-[0.06em] px-2.5 py-0.5">
-            {schedule.sessionKey}
+            {posterKey}
           </span>
         )}
         <span className="label !text-muted">
-          {isShabbat
-            ? "RECOVERY · MOBILITY · WALKING"
-            : isRunDay
-              ? "RUN OR LONG ZONE 2 · CHECK ANKLE AM"
-              : schedule.sessionKey
-                ? `${SESSIONS[schedule.sessionKey].subtitle.toUpperCase()} · 45 MIN CAP`
-                : schedule.label.toUpperCase()}
+          {posterKey
+            ? `${SESSIONS[posterKey].subtitle.toUpperCase()} · NEXT UP`
+            : "RECOVERY · MOBILITY · WALKING"}
         </span>
       </div>
 
@@ -548,15 +541,9 @@ export default function TodayView() {
       <RecoveryCard fuelingDay={fuelingDay} />
 
       {/* CTA */}
-      {!isShabbat && (
-        <Button size="lg" className="mt-6" onClick={startToday}>
-          {schedule.sessionKey
-            ? `Start ${schedule.sessionKey} →`
-            : isRunDay
-              ? "Open run day →"
-              : "Open train →"}
-        </Button>
-      )}
+      <Button size="lg" className="mt-6" onClick={startToday}>
+        {posterKey ? `Start ${posterKey} →` : "Open train →"}
+      </Button>
       <div className="grid grid-cols-2 gap-2 mt-2.5">
         <Button variant="secondary" size="md" onClick={() => goTrain({ type: "run" })}>
           Log run
