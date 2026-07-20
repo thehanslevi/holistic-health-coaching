@@ -71,20 +71,6 @@ export default function WeekBalance() {
     Math.max(1, Math.min(c.recoveryDays, 6)),
   );
 
-  // A broad, non-prescriptive nudge toward the category with the most room —
-  // aerobic first, per her priorities. Never names a session.
-  const zone2Gap = Math.max(0, c.zone2Min - c.zone2Done);
-  const runGap = Math.max(0, c.runTarget - c.runsDone);
-  const strengthGap = Math.max(0, c.strengthTarget - c.strengthDone);
-  const note =
-    zone2Gap > 0
-      ? `Zone 2 has the most room — ${zone2Gap} more would round out the aerobic side.`
-      : runGap > 0
-        ? "A run is still open this cycle, whenever the ankle reads green."
-        : strengthGap > 0
-          ? `Room for ${strengthGap} more strength session${strengthGap > 1 ? "s" : ""} if recovery's there.`
-          : "Full cycle — the dose is in. Recovery is doing its job.";
-
   return (
     <div className="border border-line bg-surface p-3.5 mb-4">
       <div className="flex items-baseline justify-between mb-3.5">
@@ -97,14 +83,6 @@ export default function WeekBalance() {
         <Meter label="Zone 2" value={`${c.zone2Done}`} sub={`/${c.zone2Min}–${c.zone2Max}`} cells={zone2Cells} />
         <Meter label="Run · green" value={`${c.runsDone}`} sub={`/${c.runTarget}`} cells={runCells} />
         <Meter label="Recovery" value={`${c.recoveryDays}`} sub=" days" cells={recoveryCells} tone="calm" />
-      </div>
-
-      <div className="border-l-[3px] border-accent/60 pl-3 py-1 mt-3.5">
-        <div className="text-[12px] text-ink leading-snug">{note}</div>
-      </div>
-      <div className="text-[11px] text-muted leading-snug mt-2">
-        Where you are this cycle — a dose to fill, not a fixed weekly schedule. No workout is
-        &quot;due&quot; on any given day.
       </div>
     </div>
   );

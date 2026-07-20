@@ -83,25 +83,6 @@ export default function RecoveryCard({ fuelingDay }: { fuelingDay: boolean }) {
           label="Done"
         />
       </div>
-
-      <div className="flex items-center justify-between py-2 border-t border-line">
-        <span className="text-[13px] text-ink">Vipassana</span>
-        <div className="flex gap-1.5">
-          {[0, 1, 2, 3].map((n) => (
-            <button
-              key={n}
-              onClick={() => patch({ vipassana: n })}
-              className={`stat-num w-8 h-8 text-[14px] border cursor-pointer transition-colors ${
-                (rec?.vipassana ?? -1) === n
-                  ? "bg-accent text-accent-ink border-accent"
-                  : "border-line-strong text-faint hover:text-ink"
-              }`}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

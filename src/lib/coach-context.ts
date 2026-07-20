@@ -169,7 +169,6 @@ export async function buildCoachCore(): Promise<string> {
       recovery.post_run_protocol != null
         ? `ankle post-run protocol: ${recovery.post_run_protocol ? "done" : "not done"}`
         : null,
-      recovery.vipassana != null ? `Vipassana: ${recovery.vipassana}/3` : null,
       recovery.sleep_quality != null ? `sleep quality: ${recovery.sleep_quality}/5` : null,
     ].filter(Boolean);
     if (bits.length) lines.push(`Recovery check (${recovery.date}): ${bits.join(", ")}.`);
@@ -327,7 +326,6 @@ export async function buildCoachContext(): Promise<{
       recovery.post_run_protocol != null
         ? `ankle post-run protocol: ${recovery.post_run_protocol ? "done" : "not done"}`
         : null,
-      recovery.vipassana != null ? `Vipassana: ${recovery.vipassana}/3` : null,
       recovery.sleep_quality != null ? `sleep quality: ${recovery.sleep_quality}/5` : null,
     ].filter(Boolean);
     if (bits.length) lines.push(`Recovery check (${recovery.date}): ${bits.join(", ")}.`);
