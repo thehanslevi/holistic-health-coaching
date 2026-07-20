@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiRaw } from "@/lib/client";
 import {
   computeConsistency,
-  computeCycle,
   cycleSignal,
   featuredLift,
   pendingRuns,
@@ -12,12 +11,7 @@ import {
   weekDayHits,
   type PendingRun,
 } from "@/lib/analytics";
-import {
-  SESSIONS,
-  runTraffic,
-  todayISO,
-  type SessionKey,
-} from "@/lib/program";
+import { runTraffic, todayISO } from "@/lib/program";
 import { isRunLog, type Checkin, type HealthRow, type Readiness } from "@/lib/types";
 import type { CycleState } from "@/lib/cycle";
 import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
@@ -28,6 +22,7 @@ import CalendarOverlay from "@/components/today/CalendarOverlay";
 import RecoveryCard from "@/components/today/RecoveryCard";
 import PushOptIn from "@/components/today/PushOptIn";
 import ResumeSessionCard from "@/components/today/ResumeSessionCard";
+import WeekBalance from "@/components/train/WeekBalance";
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
@@ -121,7 +116,7 @@ function PendingRunCard({ run }: { run: PendingRun }) {
 }
 
 export default function TodayView() {
-  const { logs, goTrain, setTab } = useApp();
+  const { logs, goTrain, setTab, activePhase } = useApp();
   const [checkin, setCheckin] = useState<Checkin | null | undefined>(undefined);
   const [brief, setBrief] = useState<string | null>(null);
   const [briefInputs, setBriefInputs] = useState<BriefInputs | null>(null);
@@ -134,18 +129,10 @@ export default function TodayView() {
   const dayIdx = (now.getDay() + 6) % 7;
   const isSaturday = dayIdx === 5; // Saturday defaults to recovery unless she chooses otherwise
 
-  // No fixed weekday schedule. The masthead points at the next session in the
-  // rolling rotation, computed from what she actually logged — not the weekday.
-  // The coach brief below carries the nuanced call (readiness, joints, spacing).
-  const trainCycle = useMemo(() => computeCycle(logs), [logs]);
-  const posterKey: SessionKey | null = isSaturday ? null : trainCycle.nextStrength;
-
-  // Poster title: the next session (or Recover on a default-recovery Saturday)
-  const posterLabel = posterKey ? SESSIONS[posterKey].label : "Recover";
-  const titleLines: [string, string] =
-    posterLabel.split(" ").length > 1
-      ? [posterLabel.split(" ")[0], posterLabel.split(" ").slice(1).join(" ")]
-      : [posterLabel, ""];
+  // No named "next session" on Today — the day leads with the cycle dose (where
+  // she is against her targets), not a workout the app says is due. The header
+  // just names the block she's in; the coach brief carries the nuanced call.
+  const phaseFocus = activePhase?.focus?.split(/[;,]/)[0]?.trim().toUpperCase() ?? "";
 
   // Readiness
   useEffect(() => {
@@ -238,11 +225,6 @@ export default function TodayView() {
   const pending = useMemo(() => pendingRuns(logs), [logs]);
   const fuelingDay = !isSaturday; // most days carry a session; Saturday defaults to recovery
 
-  const startToday = () => {
-    if (posterKey) goTrain({ type: "session", sessionKey: posterKey });
-    else setTab("train");
-  };
-
   const lightColor = (l: "green" | "yellow" | "red") =>
     l === "green" ? "text-go" : l === "yellow" ? "text-hold" : "text-stop";
 
@@ -263,29 +245,20 @@ export default function TodayView() {
           </span>
           <span className="text-accent text-[13px] leading-none">▦</span>
         </button>
+        {phaseFocus && (
+          <button
+            onClick={() => setTab("train")}
+            className="label !text-faint hover:!text-muted cursor-pointer"
+            aria-label="Program and phases"
+          >
+            PHASE {activePhase?.phase_number} · {phaseFocus}
+          </button>
+        )}
       </div>
 
-      {/* Poster title */}
-      <h1 className="display-i text-[64px] text-ink mt-4">
-        {titleLines[0]}
-        {titleLines[1] && (
-          <>
-            <br />
-            {titleLines[1]}
-          </>
-        )}
-      </h1>
-      <div className="flex items-center gap-2.5 mt-3">
-        {posterKey && (
-          <span className="display bg-accent text-accent-ink text-[14px] tracking-[0.06em] px-2.5 py-0.5">
-            {posterKey}
-          </span>
-        )}
-        <span className="label !text-muted">
-          {posterKey
-            ? `${SESSIONS[posterKey].subtitle.toUpperCase()} · NEXT UP`
-            : "RECOVERY · MOBILITY · WALKING"}
-        </span>
+      {/* Cycle dose — the anchor: where you are against your targets */}
+      <div className="mt-5">
+        <WeekBalance />
       </div>
 
       {/* Resume an unfinished session (survives an app reload) */}
@@ -540,9 +513,9 @@ export default function TodayView() {
       {/* Daily recovery check */}
       <RecoveryCard fuelingDay={fuelingDay} />
 
-      {/* CTA */}
-      <Button size="lg" className="mt-6" onClick={startToday}>
-        {posterKey ? `Start ${posterKey} →` : "Open train →"}
+      {/* CTA — you pick the session; nothing is prescribed */}
+      <Button size="lg" className="mt-6" onClick={() => setTab("train")}>
+        Open training →
       </Button>
       <div className="grid grid-cols-2 gap-2 mt-2.5">
         <Button variant="secondary" size="md" onClick={() => goTrain({ type: "run" })}>
