@@ -17,7 +17,6 @@ import HistoryList from "@/components/train/HistoryList";
 import ProgressionReview from "@/components/train/ProgressionReview";
 import ProgramReview from "@/components/train/ProgramReview";
 import ProgramView from "@/components/train/ProgramView";
-import WeekBalance from "@/components/train/WeekBalance";
 import { useApp } from "@/components/AppShell";
 
 type Screen =
@@ -178,8 +177,6 @@ export default function TrainView() {
               <span className="text-accent text-lg">→</span>
             </div>
           </Card>
-
-          <WeekBalance />
         </div>
       ) : (
         <HistoryList />
