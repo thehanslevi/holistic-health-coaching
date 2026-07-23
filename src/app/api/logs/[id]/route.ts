@@ -29,9 +29,12 @@ export async function PATCH(
 
   try {
     const { id } = await ctx.params;
-    const patch = (await req.json())?.data;
-    if (!patch || typeof patch !== "object") {
-      return NextResponse.json({ error: "data patch required" }, { status: 400 });
+    const body = await req.json();
+    const patch = body?.data;
+    const loggedAt: string | undefined =
+      typeof body?.logged_at === "string" ? body.logged_at : undefined;
+    if ((!patch || typeof patch !== "object") && !loggedAt) {
+      return NextResponse.json({ error: "data patch or logged_at required" }, { status: 400 });
     }
     const db = supabase();
     const { data: existing, error: readErr } = await db
@@ -41,10 +44,19 @@ export async function PATCH(
       .single();
     if (readErr) throw new Error(readErr.message);
 
-    const merged = { ...(existing.data as object), ...patch };
+    // Moving the date updates both the column and the `date` mirrored inside the
+    // payload, so the two never disagree.
+    const merged = {
+      ...(existing.data as object),
+      ...(patch && typeof patch === "object" ? patch : {}),
+      ...(loggedAt ? { date: loggedAt } : {}),
+    };
+    const update: { data: object; logged_at?: string } = { data: merged };
+    if (loggedAt) update.logged_at = loggedAt;
+
     const { data, error } = await db
       .from("hrl_logs")
-      .update({ data: merged })
+      .update(update)
       .eq("id", id)
       .select()
       .single();

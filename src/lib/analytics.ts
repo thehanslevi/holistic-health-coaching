@@ -462,7 +462,14 @@ export function computeCycle(logs: LogRow[], now: Date = new Date()): TrainingCy
   // reset her place in the sequence.
   let lastStrength: SessionKey | null = null;
   let lastStrengthDate: string | null = null;
-  const sorted = [...logs].sort((a, b) => b.logged_at.localeCompare(a.logged_at));
+  // Deterministic order: newest calendar day first, and for two logs on the same
+  // day the one recorded later wins. Without the created_at tiebreak, two sessions
+  // logged the same day resolve in arbitrary order and the "next in rotation" can
+  // flip between reloads.
+  const sorted = [...logs].sort(
+    (a, b) =>
+      b.logged_at.localeCompare(a.logged_at) || b.created_at.localeCompare(a.created_at),
+  );
   for (const row of sorted) {
     if (isSessionLog(row) && STRENGTH_KEYS.has(row.data.sessionKey as SessionKey)) {
       lastStrength = row.data.sessionKey as SessionKey;

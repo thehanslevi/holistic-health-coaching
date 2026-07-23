@@ -36,6 +36,7 @@ type AppContextValue = {
   logsLoading: boolean;
   refreshLogs: () => Promise<void>;
   addLog: (log: LogRow) => void;
+  updateLog: (log: LogRow) => void;
   removeLog: (id: string) => void;
   // Program overrides — the living plan
   overrides: Record<string, ProgramOverride>;
@@ -244,6 +245,16 @@ export default function AppShell() {
       logsLoading,
       refreshLogs,
       addLog: (log) => setLogs((prev) => [log, ...prev]),
+      updateLog: (log) =>
+        setLogs((prev) =>
+          prev
+            .map((l) => (l.id === log.id ? log : l))
+            .sort(
+              (a, b) =>
+                b.logged_at.localeCompare(a.logged_at) ||
+                b.created_at.localeCompare(a.created_at),
+            ),
+        ),
       removeLog: (id) => setLogs((prev) => prev.filter((l) => l.id !== id)),
       overrides,
       setOverride: async (exerciseId, target, note) => {
