@@ -219,18 +219,31 @@ export const SESSION_ORDER: SessionKey[] = ["L1", "U1", "C1", "L2", "U2", "G1"];
  */
 export const SESSION_SEQUENCE: SessionKey[] = ["L1", "U1", "L2", "U2"];
 
-/** Targets across a rolling ~7–10 day cycle — a dose to hit, not a calendar. */
+/**
+ * Training goals as canonical WEEKLY rates — the authoritative unit. Anything
+ * that reasons about a different span (a 10-day view, "this fortnight") must
+ * SCALE these to that span itself: 4 strength/week is ~6 over 10 days, not 4.
+ *
+ * The coach is handed these as per-week rates and computes pace from the actual
+ * timestamped logs — it is never given a pre-scaled "X over N days" count, so a
+ * display bug can't lie to it.
+ *
+ * `windowDays` is ONLY the dose view's display window. NOTE: the dose card
+ * currently compares a raw count over `windowDays` against these weekly rates
+ * without scaling — a known display bug tracked for the dose-view fix. Do not
+ * copy that mistake into anything the coach reads.
+ */
 export const ROLLING_TARGETS = {
-  /** Aim for 4 strength sessions: the L1/U1/L2/U2 rotation, G1 as the 4th when recovery allows. */
+  /** Strength sessions per week: the L1/U1/L2/U2 rotation, G1 as the 4th when recovery allows. */
   strength: 4,
-  /** 2–3 easy aerobic (predominantly Zone 2) sessions. */
+  /** Easy aerobic (predominantly Zone 2) sessions per week. */
   zone2Min: 2,
   zone2Max: 3,
-  /** 1 run progression when the right ankle is Green. */
+  /** Run progressions per week, when the right ankle is Green. */
   run: 1,
-  /** At least 1 complete physical recovery day. */
+  /** Complete physical recovery days per week (at least). */
   recovery: 1,
-  /** The window, in days, the cycle is measured over. */
+  /** Display-only: the dose view's rolling window, in days. Not a target period. */
   windowDays: 10,
 } as const;
 
