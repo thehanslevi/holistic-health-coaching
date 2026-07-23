@@ -3,86 +3,134 @@
 import { computeCycle } from "@/lib/analytics";
 import { useApp } from "@/components/AppShell";
 
-// Rolling-cycle "dose meter" (Phase 4). No weekdays, and deliberately no "next
-// session" — this is a broad reminder of what she's trying to complete over the
-// last ~7–10 days and where she is against her targets, not a prescription that
-// one specific workout has to come next. It never blocks anything.
+// "This week, honest" dose view (Phase 4). A rolling 7-day window, so a count and
+// a weekly target share a unit — 3 of 4 strength reads as 3/4, no scaling games.
+// Each row carries a plain-language state so the gap reads at a glance. It never
+// blocks anything; it's a picture of the week she can act on.
 
-type Cell = "on" | "soft" | "off";
+type Tone = "behind" | "ok" | "ahead" | "held" | "over" | "neutral";
+type Cell = "fill" | "empty" | "warn" | "bonus" | "extra";
 
-function Meter({
-  label,
-  value,
-  sub,
-  cells,
-  tone = "volt",
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  cells: Cell[];
-  tone?: "volt" | "calm";
-}) {
-  const onCls = tone === "calm" ? "bg-accent-dim/50" : "bg-accent";
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-1.5">
-        <span className="label">{label}</span>
-        <span className="num text-[13px] text-ink">
-          {value}
-          <span className="text-faint">{sub}</span>
-        </span>
-      </div>
-      <div className="flex gap-[3px] h-4">
-        {cells.map((c, i) => (
-          <span
-            key={i}
-            className={`flex-1 ${
-              c === "on"
-                ? onCls
-                : c === "soft"
-                  ? "bg-accent-dim/25 border border-accent-dim/40"
-                  : "bg-surface-2 border border-line"
-            }`}
-          />
-        ))}
-      </div>
-    </div>
-  );
+type Metric = { label: string; value: string; sub: string; tag: string; tone: Tone; cells: Cell[] };
+
+function cellsFor(done: number, goal: number, behind: boolean, over: "bonus" | "extra" | null): Cell[] {
+  const out: Cell[] = [];
+  for (let i = 0; i < goal; i++) out.push(i < done ? "fill" : behind ? "warn" : "empty");
+  for (let i = goal; i < done; i++) out.push(over ?? "extra");
+  return out.slice(0, 6);
 }
 
-function fill(count: number, total: number): Cell[] {
-  return Array.from({ length: total }, (_, i) => (i < count ? "on" : "off"));
+function buildMetrics(c: ReturnType<typeof computeCycle>): Metric[] {
+  const s = c.strengthDone;
+  const strength: Metric = {
+    label: "Strength",
+    value: `${s}`,
+    sub: `/${c.strengthTarget}`,
+    ...(s < c.strengthTarget
+      ? { tag: `${c.strengthTarget - s} short`, tone: "behind" as Tone }
+      : s === c.strengthTarget
+        ? { tag: "met", tone: "ok" as Tone }
+        : { tag: "held", tone: "held" as Tone }),
+    cells: cellsFor(s, c.strengthTarget, s < c.strengthTarget, "extra"),
+  };
+
+  const z = c.zone2Done;
+  const zone2: Metric = {
+    label: "Zone 2",
+    value: `${z}`,
+    sub: `/${c.zone2Min}–${c.zone2Max}`,
+    ...(z === 0
+      ? { tag: "none yet", tone: "behind" as Tone }
+      : z < c.zone2Min
+        ? { tag: `${c.zone2Min - z} short`, tone: "behind" as Tone }
+        : z <= c.zone2Max
+          ? { tag: "in range", tone: "ok" as Tone }
+          : { tag: "ahead", tone: "ahead" as Tone }),
+    cells: cellsFor(z, c.zone2Max, z < c.zone2Min, "bonus"),
+  };
+
+  const r = c.runsDone;
+  const run: Metric = {
+    label: "Run · green",
+    value: `${r}`,
+    sub: `/${c.runTarget}`,
+    ...(r === 0
+      ? { tag: "when green", tone: "neutral" as Tone }
+      : r === c.runTarget
+        ? { tag: "met", tone: "ok" as Tone }
+        : { tag: "ahead", tone: "ahead" as Tone }),
+    cells: cellsFor(r, c.runTarget, false, "bonus"),
+  };
+
+  const rec = c.recoveryDays;
+  const recovery: Metric = {
+    label: "Recovery",
+    value: `${rec}`,
+    sub: " day" + (rec === 1 ? "" : "s"),
+    ...(rec === 0
+      ? { tag: "rest due", tone: "neutral" as Tone }
+      : rec === 1
+        ? { tag: "met", tone: "ok" as Tone }
+        : { tag: `+${rec - 1} rest`, tone: "over" as Tone }),
+    cells: cellsFor(rec, 1, false, "extra"),
+  };
+
+  return [strength, zone2, run, recovery];
 }
+
+const CELL: Record<Cell, string> = {
+  fill: "bg-accent border border-accent",
+  bonus: "bg-go border border-go",
+  extra: "bg-accent-dim/40 border border-accent-dim/40",
+  warn: "bg-transparent border border-hold/60",
+  empty: "bg-surface-2 border border-line",
+};
+
+const TAG: Record<Tone, string> = {
+  behind: "text-hold border-hold/40",
+  ok: "text-go border-go/40",
+  ahead: "bg-accent text-accent-ink border-accent",
+  held: "text-muted border-line",
+  over: "text-hold border-hold/40",
+  neutral: "text-faint border-line",
+};
 
 export default function WeekBalance() {
   const { logs } = useApp();
   const c = computeCycle(logs);
-
-  const strengthCells = fill(c.strengthDone, c.strengthTarget);
-  // Zone 2: filled up to done, then "still aiming" cells up to the minimum,
-  // then a faint bonus cell up to the max.
-  const zone2Cells: Cell[] = Array.from({ length: c.zone2Max }, (_, i) =>
-    i < c.zone2Done ? "on" : i < c.zone2Min ? "soft" : "off",
-  );
-  const runCells = fill(c.runsDone, Math.max(c.runTarget, c.runsDone, 1));
-  const recoveryCells = fill(
-    Math.min(c.recoveryDays, 6),
-    Math.max(1, Math.min(c.recoveryDays, 6)),
-  );
+  const metrics = buildMetrics(c);
 
   return (
     <div className="border border-line bg-surface p-3.5 mb-4">
       <div className="flex items-baseline justify-between mb-3.5">
-        <div className="label">Cycle dose</div>
-        <div className="label !text-faint">last {c.windowDays} days</div>
+        <div className="label">This week</div>
+        <div className="label !text-faint">rolling {c.windowDays} days</div>
       </div>
 
       <div className="flex flex-col gap-3">
-        <Meter label="Strength" value={`${c.strengthDone}`} sub={`/${c.strengthTarget}`} cells={strengthCells} />
-        <Meter label="Zone 2" value={`${c.zone2Done}`} sub={`/${c.zone2Min}–${c.zone2Max}`} cells={zone2Cells} />
-        <Meter label="Run · green" value={`${c.runsDone}`} sub={`/${c.runTarget}`} cells={runCells} />
-        <Meter label="Recovery" value={`${c.recoveryDays}`} sub=" days" cells={recoveryCells} tone="calm" />
+        {metrics.map((m) => (
+          <div key={m.label}>
+            <div className="flex items-baseline justify-between mb-1.5">
+              <span className="label">{m.label}</span>
+              <span className="num text-[13px] text-ink">
+                {m.value}
+                <span className="text-faint">{m.sub}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <div className="flex gap-[3px] h-4 flex-1">
+                {m.cells.map((cell, i) => (
+                  <span key={i} className={`flex-1 ${CELL[cell]}`} />
+                ))}
+              </div>
+              <span
+                className={`display text-[9px] tracking-[0.08em] px-1.5 py-0.5 border shrink-0 ${TAG[m.tone]}`}
+              >
+                {m.tag.toUpperCase()}
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

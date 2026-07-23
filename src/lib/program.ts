@@ -228,10 +228,10 @@ export const SESSION_SEQUENCE: SessionKey[] = ["L1", "U1", "L2", "U2"];
  * timestamped logs — it is never given a pre-scaled "X over N days" count, so a
  * display bug can't lie to it.
  *
- * `windowDays` is ONLY the dose view's display window. NOTE: the dose card
- * currently compares a raw count over `windowDays` against these weekly rates
- * without scaling — a known display bug tracked for the dose-view fix. Do not
- * copy that mistake into anything the coach reads.
+ * `windowDays` is ONLY the dose view's display window, and it is 7 so a count
+ * over the window and a weekly rate share a unit — no scaling, no mismatch (3 of
+ * 4 strength reads as 3/4). The coach is still never handed a windowed count as a
+ * target; it reasons in weekly rates from the logs.
  */
 export const ROLLING_TARGETS = {
   /** Strength sessions per week: the L1/U1/L2/U2 rotation, G1 as the 4th when recovery allows. */
@@ -241,10 +241,12 @@ export const ROLLING_TARGETS = {
   zone2Max: 3,
   /** Run progressions per week, when the right ankle is Green. */
   run: 1,
-  /** Complete physical recovery days per week (at least). */
+  /** Complete physical recovery days per week — exactly one. More than one full
+   *  rest day reads as under-training, not extra recovery. */
   recovery: 1,
-  /** Display-only: the dose view's rolling window, in days. Not a target period. */
-  windowDays: 10,
+  /** Display-only: the dose view's rolling window. 7 days so a windowed count and
+   *  a weekly rate share a unit. */
+  windowDays: 7,
 } as const;
 
 /** Sequencing rules the coach applies when recommending the next session. */
