@@ -98,7 +98,6 @@ const COLUMNS = [
   "session_rpe",
   "last_set_rir",
   "duration_min",
-  "facility",
   "pre_fuel",
   "pre_fuel_timing",
   "run_type",
@@ -170,7 +169,6 @@ export async function buildExportCSV(): Promise<string> {
             session_rpe: log.data.sessionRPE ?? "",
             last_set_rir: log.data.lastSetRIR ?? "",
             duration_min: log.data.durationMin ?? "",
-            facility: log.data.facility ?? "",
             pre_fuel: log.data.preFuel?.status ?? "",
             pre_fuel_timing: log.data.preFuel?.timing ?? "",
           });

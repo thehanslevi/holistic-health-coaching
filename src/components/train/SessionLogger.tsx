@@ -7,7 +7,6 @@ import { prescribeSet } from "@/lib/prescribe";
 import { formatLogAsText } from "@/lib/format";
 import {
   EXERCISE_THERAPY,
-  FACILITIES,
   FUEL_OPTIONS,
   FUEL_TIMING_OPTIONS,
   PT_CIRCUIT,
@@ -544,13 +543,6 @@ export default function SessionLogger({
             </>
           )}
 
-          <div className="label !text-[9px] mt-4 mb-2">Which gym</div>
-          <ChipGroup
-            cols={2}
-            options={FACILITIES.map((f) => ({ value: f, label: f.replace(" YMCA", "") }))}
-            value={log.facility ?? null}
-            onChange={(v) => setField("facility", v)}
-          />
         </div>
 
         <div className="mt-5 border border-line p-3.5">

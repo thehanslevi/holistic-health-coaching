@@ -274,17 +274,6 @@ export function nextStrengthSession(lastCompleted: SessionKey | null): SessionKe
   return SESSION_SEQUENCE[(i + 1) % SESSION_SEQUENCE.length];
 }
 
-/**
- * Where she trains. The leg press in particular is not the same machine across
- * branches, so a load is only comparable to itself within a facility.
- */
-export const FACILITIES = [
-  "Bed-Stuy YMCA",
-  "Chinatown YMCA",
-  "14th Street YMCA",
-  "Other",
-] as const;
-
 /** Shared fuel options — the same question wherever it's asked. */
 export const FUEL_OPTIONS = [
   { value: "protein_carbs", label: "Protein + carbs" },

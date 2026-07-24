@@ -5,6 +5,7 @@ import { api } from "@/lib/client";
 import { FUEL_OPTIONS, todayISO } from "@/lib/program";
 import type { FuelStatus, Recovery } from "@/lib/types";
 import { ChipGroup } from "@/components/ui";
+import { useApp } from "@/components/AppShell";
 
 function Toggle({
   on,
@@ -28,8 +29,11 @@ function Toggle({
 }
 
 export default function RecoveryCard({ fuelingDay }: { fuelingDay: boolean }) {
+  const { logs } = useApp();
   const [rec, setRec] = useState<Recovery | null>(null);
   const today = todayISO();
+  // "After training" only makes sense once there's training to be after.
+  const trainedToday = logs.some((l) => l.logged_at === today);
 
   useEffect(() => {
     api<Recovery[]>(`/api/recovery?since=${today}`)
@@ -87,12 +91,13 @@ export default function RecoveryCard({ fuelingDay }: { fuelingDay: boolean }) {
         />
       </div>
 
-      {/* Post-training fuel lives here rather than at save, because after a
-          session she doesn't know yet. Appetite is unreliable on semaglutide,
-          so this gets recorded instead of assumed. */}
-      {fuelingDay && (
+      {/* Asked here rather than at save, because straight after a session she
+          doesn't know yet. Only appears once something is actually logged today
+          — on a rest day there's no "after training" to ask about. Appetite is
+          unreliable on semaglutide, so this gets recorded instead of assumed. */}
+      {trainedToday && (
         <div className="py-2 border-t border-line">
-          <div className="label !text-[9px] mb-2">Eaten since training</div>
+          <div className="label !text-[9px] mb-2">Food after today&apos;s workout</div>
           <ChipGroup
             cols={3}
             options={FUEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}

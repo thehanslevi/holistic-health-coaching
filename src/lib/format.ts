@@ -46,8 +46,6 @@ function formatSessionLog(data: SessionLogData, sessions: ProgramSessions = SESS
   const lines = [
     `SESSION LOG — ${sessionLabel}`,
     `Date: ${data.date}`,
-    data.facility ? `Facility: ${data.facility}` : null,
-    data.machineNote ? `Machine: ${data.machineNote}` : null,
     data.durationMin != null ? `Duration: ${data.durationMin} min` : null,
     fuel ? `Pre-training fuel: ${fuel}` : null,
     `Knee: ${data.kneeStart}/10 → ${data.kneeEnd}/10`,

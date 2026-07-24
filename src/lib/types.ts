@@ -51,14 +51,6 @@ export type SessionLogData = {
   lastSetRIR?: number | null;
   /** What she ate before this session. */
   preFuel?: PreFuel;
-  /**
-   * Which gym. Machines differ between branches — the leg press especially —
-   * so loads are only comparable within a facility. Without this, a branch
-   * change reads as a strength change.
-   */
-  facility?: string | null;
-  /** Anything about the specific machine worth remembering (seat, stack, plates). */
-  machineNote?: string;
 };
 
 export type RunLogData = {
