@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { exerciseMax, lastSessionLog, sessionAdjustment, sessionVolume } from "@/lib/analytics";
+import { prescribeSet } from "@/lib/prescribe";
 import { formatLogAsText } from "@/lib/format";
 import {
   EXERCISE_THERAPY,
@@ -332,19 +333,25 @@ export default function SessionLogger({
   const setEntry = (key: string, v: SetEntry) =>
     setLog((l) => ({ ...l, sets: { ...l.sets, [key]: v } }));
 
-  // Prefill: last session's numbers are the starting point
+  // Prefill: last session's numbers are the starting point — but only where the
+  // prior effort actually matches what THIS session prescribes. A strength load
+  // does not become the suggestion for a high-rep day, and a yellow morning
+  // trims what's offered. See lib/prescribe.ts.
   const begin = () => {
-    if (prev) {
-      const prefill: Record<string, SetEntry> = {};
-      for (const ex of session.exercises) {
-        for (let i = 0; i < ex.sets; i++) {
-          const key = `${ex.id}_s${i}`;
-          const old = prev.data.sets[key];
-          if (old && (old.reps || old.weight || old.duration)) prefill[key] = { ...old };
-        }
+    const prefill: Record<string, SetEntry> = {};
+    for (const ex of session.exercises) {
+      for (let i = 0; i < ex.sets; i++) {
+        const key = `${ex.id}_s${i}`;
+        const { source, ...entry } = prescribeSet({
+          exercise: ex,
+          previous: prev?.data.sets[key],
+          readiness,
+        });
+        void source;
+        if (entry.reps || entry.weight || entry.duration) prefill[key] = entry;
       }
-      setLog((l) => ({ ...l, sets: prefill }));
     }
+    setLog((l) => ({ ...l, sets: prefill }));
     setStage({ name: "exercise", idx: 0 });
     setShowNote(false);
   };
