@@ -409,11 +409,14 @@ export type TrainingCycle = {
   windowDays: number;
   strengthDone: number;
   strengthTarget: number;
+  /** Easy aerobic cross-training (Zone 2 bike/swim/etc.), NOT counting runs. */
   zone2Done: number;
   zone2Min: number;
   zone2Max: number;
   runsDone: number;
   runTarget: number;
+  /** Total aerobic sessions = Zone 2 cross-training + runs (a run is aerobic too). */
+  aerobicDone: number;
   /** Days in the window with nothing logged — a proxy for complete recovery days. */
   recoveryDays: number;
   /** Most recent strength session she actually logged (any of L1/U1/L2/U2/G1). */
@@ -488,6 +491,7 @@ export function computeCycle(logs: LogRow[], now: Date = new Date()): TrainingCy
     zone2Max: ROLLING_TARGETS.zone2Max,
     runsDone,
     runTarget: ROLLING_TARGETS.run,
+    aerobicDone: zone2Done + runsDone,
     recoveryDays: win - activeDays.size,
     lastStrength,
     lastStrengthDate,

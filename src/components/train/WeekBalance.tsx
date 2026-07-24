@@ -11,7 +11,7 @@ import { useApp } from "@/components/AppShell";
 type Tone = "behind" | "ok" | "ahead" | "held" | "over" | "neutral";
 type Cell = "fill" | "empty" | "warn" | "bonus" | "extra";
 
-type Metric = { label: string; value: string; sub: string; tag: string; tone: Tone; cells: Cell[] };
+type Metric = { label: string; value: string; sub: string; tag: string; tone: Tone; cells: Cell[]; note?: string };
 
 function cellsFor(done: number, goal: number, behind: boolean, over: "bonus" | "extra" | null): Cell[] {
   const out: Cell[] = [];
@@ -34,32 +34,22 @@ function buildMetrics(c: ReturnType<typeof computeCycle>): Metric[] {
     cells: cellsFor(s, c.strengthTarget, s < c.strengthTarget, "extra"),
   };
 
-  const z = c.zone2Done;
-  const zone2: Metric = {
-    label: "Zone 2",
-    value: `${z}`,
+  // Aerobic counts runs too — a run is aerobic work, so it fills the Zone 2 goal.
+  // The composition line keeps the mix visible (e.g. all runs, no low-impact Z2).
+  const a = c.aerobicDone;
+  const aerobic: Metric = {
+    label: "Aerobic",
+    value: `${a}`,
     sub: `/${c.zone2Min}–${c.zone2Max}`,
-    ...(z === 0
+    ...(a === 0
       ? { tag: "none yet", tone: "behind" as Tone }
-      : z < c.zone2Min
-        ? { tag: `${c.zone2Min - z} short`, tone: "behind" as Tone }
-        : z <= c.zone2Max
-          ? { tag: "in range", tone: "ok" as Tone }
+      : a < c.zone2Min
+        ? { tag: `${c.zone2Min - a} short`, tone: "behind" as Tone }
+        : a <= c.zone2Max
+          ? { tag: "on track", tone: "ok" as Tone }
           : { tag: "ahead", tone: "ahead" as Tone }),
-    cells: cellsFor(z, c.zone2Max, z < c.zone2Min, "bonus"),
-  };
-
-  const r = c.runsDone;
-  const run: Metric = {
-    label: "Run · green",
-    value: `${r}`,
-    sub: `/${c.runTarget}`,
-    ...(r === 0
-      ? { tag: "when green", tone: "neutral" as Tone }
-      : r === c.runTarget
-        ? { tag: "met", tone: "ok" as Tone }
-        : { tag: "ahead", tone: "ahead" as Tone }),
-    cells: cellsFor(r, c.runTarget, false, "bonus"),
+    cells: cellsFor(a, c.zone2Max, a < c.zone2Min, "bonus"),
+    note: `${c.runsDone} run${c.runsDone === 1 ? "" : "s"} · ${c.zone2Done} Zone 2`,
   };
 
   const rec = c.recoveryDays;
@@ -75,7 +65,7 @@ function buildMetrics(c: ReturnType<typeof computeCycle>): Metric[] {
     cells: cellsFor(rec, 1, false, "extra"),
   };
 
-  return [strength, zone2, run, recovery];
+  return [strength, aerobic, recovery];
 }
 
 const CELL: Record<Cell, string> = {
@@ -129,6 +119,7 @@ export default function WeekBalance() {
                 {m.tag.toUpperCase()}
               </span>
             </div>
+            {m.note && <div className="text-[11px] text-faint num mt-1.5">{m.note}</div>}
           </div>
         ))}
       </div>
