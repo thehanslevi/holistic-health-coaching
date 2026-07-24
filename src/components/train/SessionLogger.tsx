@@ -22,6 +22,26 @@ import { clearSessionDraft, readSessionDraft, writeSessionDraft } from "@/lib/se
 
 const REST_SECONDS = 90;
 
+// Effort, in her words rather than a bare number.
+const RPE_OPTIONS = [
+  { value: 5, label: "easy" },
+  { value: 6, label: "could do more" },
+  { value: 7, label: "solid" },
+  { value: 8, label: "hard" },
+  { value: 9, label: "very hard" },
+  { value: 10, label: "max / failed" },
+] as const;
+
+// Reps left on the last hard set. -1 is the one that blocks progression.
+const RIR_OPTIONS = [
+  { value: 4, label: "4+" },
+  { value: 3, label: "3" },
+  { value: 2, label: "2" },
+  { value: 1, label: "1" },
+  { value: 0, label: "0" },
+  { value: -1, label: "form broke" },
+] as const;
+
 // Parse a spoken set like "70 for 8", "8 reps at 70 pounds", "12 reps" into
 // weight/reps. Keyword anchors win; otherwise the larger number is the weight.
 function parseSetSpeech(text: string): { reps?: string; weight?: string } {
@@ -259,7 +279,13 @@ export default function SessionLogger({
     cooldownCount: 0,
     cooldownTotal: session.cooldown.length,
     notes: "",
+    sessionRPE: null,
+    lastSetRIR: null,
   });
+  // When Begin was pressed — the session's real length, auto-filled at the end
+  // and editable there. Nothing wrote this before, so durations were absent or
+  // came from the old v1 import (hence the 1- and 2-minute "sessions").
+  const startedAtRef = useRef<number | null>(null);
   const [doneSets, setDoneSets] = useState<Record<string, boolean>>({});
   const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
   const [showPt, setShowPt] = useState(false);
@@ -352,9 +378,16 @@ export default function SessionLogger({
       }
     }
     setLog((l) => ({ ...l, sets: prefill }));
+    startedAtRef.current = Date.now();
     setStage({ name: "exercise", idx: 0 });
     setShowNote(false);
   };
+
+  /** Elapsed minutes since Begin, for the duration field at save. */
+  const elapsedMin = (): number | null =>
+    startedAtRef.current == null
+      ? null
+      : Math.max(1, Math.round((Date.now() - startedAtRef.current) / 60000));
 
   const completeSet = (key: string, isLastSetOfExercise: boolean) => {
     setDoneSets((d) => {
@@ -368,8 +401,12 @@ export default function SessionLogger({
     setRestEndsAt(null);
     setShowNote(false);
     if (idx < 0) setStage({ name: "intro" });
-    else if (idx >= session.exercises.length) setStage({ name: "finish" });
-    else setStage({ name: "exercise", idx });
+    else if (idx >= session.exercises.length) {
+      // Auto-fill the elapsed time on arrival; she can correct it below.
+      const mins = elapsedMin();
+      if (mins != null) setLog((l) => (l.durationMin == null ? { ...l, durationMin: mins } : l));
+      setStage({ name: "finish" });
+    } else setStage({ name: "exercise", idx });
   };
 
   const handleSave = async () => {
@@ -378,7 +415,7 @@ export default function SessionLogger({
     // Only sets marked done are real — prefilled-but-unperformed sets drop out
     const performedSets: Record<string, SetEntry> = {};
     for (const [key, entry] of Object.entries(log.sets)) {
-      if (doneSets[key] && (entry.reps || entry.weight || entry.duration))
+      if (doneSets[key] && (entry.reps || entry.weight || entry.duration || entry.assistWeight))
         performedSets[key] = entry;
     }
     const payload: SessionLogData = { ...log, sets: performedSets };
@@ -529,6 +566,7 @@ export default function SessionLogger({
     const idx = stage.idx;
     const ex: Exercise = session.exercises[idx];
     const isInfoOnly = ex.id === "g1_note";
+    const isAssisted = ex.loadType === "assistance";
     const weighted = ex.weighted !== false;
     const prevTop = prev
       ? Object.entries(prev.data.sets)
@@ -537,7 +575,13 @@ export default function SessionLogger({
       : [];
     const lastLine = prevTop.length
       ? prevTop
-          .map((e) => (ex.timed ? e.duration : `${e.reps ?? "?"}${e.weight ? `×${e.weight}` : ""}`))
+          .map((e) =>
+            ex.timed
+              ? e.duration
+              : isAssisted
+                ? `${e.reps ?? "?"}${e.assistWeight ? ` @${e.assistWeight} assist` : ""}`
+                : `${e.reps ?? "?"}${e.weight ? `×${e.weight}` : ""}`,
+          )
           .filter(Boolean)
           .join(" · ")
       : null;
@@ -680,6 +724,14 @@ export default function SessionLogger({
                       label="Reps"
                     />
                   )}
+                  {isAssisted && (
+                    <Stepper
+                      value={entry.assistWeight ?? ""}
+                      onChange={(v) => setEntry(key, { ...entry, assistWeight: v })}
+                      step={5}
+                      label="Assist lbs"
+                    />
+                  )}
                   {weighted && (
                     <Stepper
                       value={entry.weight ?? ""}
@@ -785,6 +837,74 @@ export default function SessionLogger({
               className={`${inputClass} num`}
             />
           </Field>
+        </div>
+
+        {/* How hard it actually was. Load says what she moved; this says what it
+            cost — and it's what decides whether a lift progresses next time. */}
+        <div className="mt-4 border border-line p-3.5">
+          <SectionLabel>How it went</SectionLabel>
+          <div className="label !text-[9px] mb-2">Session effort</div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {RPE_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                onClick={() => setField("sessionRPE", log.sessionRPE === o.value ? null : o.value)}
+                className={`border px-1 py-2 cursor-pointer transition-colors ${
+                  log.sessionRPE === o.value
+                    ? "bg-accent text-accent-ink border-accent"
+                    : "border-line-strong text-muted hover:text-ink"
+                }`}
+              >
+                <span className="stat-num text-[16px] block leading-none">{o.value}</span>
+                <span className="label !text-[8px] !text-inherit block mt-1">{o.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="label !text-[9px] mt-4 mb-2">Last hard set — reps left in the tank</div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {RIR_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                onClick={() => setField("lastSetRIR", log.lastSetRIR === o.value ? null : o.value)}
+                className={`border px-1 py-2 cursor-pointer transition-colors ${
+                  log.lastSetRIR === o.value
+                    ? "bg-accent text-accent-ink border-accent"
+                    : "border-line-strong text-muted hover:text-ink"
+                }`}
+              >
+                <span className="display text-[13px] block leading-none">{o.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="label !text-[9px] mt-4 mb-2">Time on the floor</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {[30, 45, 60, 75].map((m) => (
+              <button
+                key={m}
+                onClick={() => setField("durationMin", m)}
+                className={`display text-[12px] tracking-[0.06em] border px-2.5 py-1.5 cursor-pointer transition-colors ${
+                  log.durationMin === m
+                    ? "bg-accent text-accent-ink border-accent"
+                    : "border-line-strong text-muted hover:text-ink"
+                }`}
+              >
+                {m === 75 ? "75+" : m} min
+              </button>
+            ))}
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              placeholder="min"
+              value={log.durationMin ?? ""}
+              onChange={(e) =>
+                setField("durationMin", e.target.value ? Number(e.target.value) : undefined)
+              }
+              className={`${inputClass} num !py-1.5 !px-2.5 !text-[13px] w-20`}
+            />
+          </div>
         </div>
 
         <Field label="Session notes" className="mt-4">

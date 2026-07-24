@@ -17,15 +17,20 @@ function formatSessionLog(data: SessionLogData, sessions: ProgramSessions = SESS
   const sessionLabel = session
     ? `${session.label}: ${session.subtitle}`
     : data.sessionKey;
+  const rirLabel = (v: number) =>
+    v < 0 ? "failed / form broke" : v === 0 ? "0 — nothing left" : `${v}`;
   const lines = [
     `SESSION LOG — ${sessionLabel}`,
     `Date: ${data.date}`,
+    data.durationMin != null ? `Duration: ${data.durationMin} min` : null,
     `Knee: ${data.kneeStart}/10 → ${data.kneeEnd}/10`,
     `Bike warm-up: ${data.bikeMin} min`,
+    data.sessionRPE != null ? `Session RPE: ${data.sessionRPE}/10` : null,
+    data.lastSetRIR != null ? `Last hard set — reps in reserve: ${rirLabel(data.lastSetRIR)}` : null,
     `PT Circuit: ${data.ptDone ? "Done" : "Not logged"}`,
     `Exercise Therapy: ${data.exerciseTherapyDone ? "Done" : "Not logged"}`,
     "---",
-  ];
+  ].filter(Boolean) as string[];
   if (session) {
     session.exercises.forEach((ex) => {
       const setStrs = Array.from({ length: ex.sets }, (_, i) => {
@@ -33,6 +38,16 @@ function formatSessionLog(data: SessionLogData, sessions: ProgramSessions = SESS
         if (ex.timed) {
           return s.duration
             ? `Set ${i + 1}: ${s.duration}${ex.weighted && s.weight ? ` × ${s.weight} lbs` : ""}`
+            : null;
+        }
+        // Assistance is spelled out, never as "× N lbs" — the machine is taking
+        // weight off her, and a reader who mistakes the two reads progress
+        // backwards.
+        if (ex.loadType === "assistance") {
+          return s.reps || s.assistWeight
+            ? `Set ${i + 1}: ${s.reps ?? "?"} reps${
+                s.assistWeight ? ` × ${s.assistWeight} lb assistance` : " (assistance not logged)"
+              }`
             : null;
         }
         return s.reps || s.weight

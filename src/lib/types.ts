@@ -4,6 +4,12 @@ export type SetEntry = {
   reps?: string;
   weight?: string;
   duration?: string;
+  /**
+   * Assistance load on assisted work (pull-ups, dips) in lbs. NOT weight lifted:
+   * more assistance is EASIER, so progress here means this number going down.
+   * Kept separate from `weight` so nothing ever reads it as external load.
+   */
+  assistWeight?: string;
 };
 
 export type SessionLogData = {
@@ -18,8 +24,22 @@ export type SessionLogData = {
   cooldownCount: number;
   cooldownTotal: number;
   notes: string;
-  /** Wall-clock minutes from Begin to Save in guided mode (v3+) */
+  /**
+   * How long the session actually took. Auto-filled from Begin→Save in guided
+   * mode and editable at save — reps and weights alone can't tell an abbreviated
+   * session from a full one.
+   */
   durationMin?: number;
+  /**
+   * Whole-session effort, 1–10 (6–7 productive, 8 hard, 9–10 very hard/max).
+   * Load says what she moved; this says what it cost.
+   */
+  sessionRPE?: number | null;
+  /**
+   * Reps left in reserve on the last hard set. 0 = nothing left;
+   * -1 = failed or form broke. Gates whether a lift should progress.
+   */
+  lastSetRIR?: number | null;
 };
 
 export type RunLogData = {

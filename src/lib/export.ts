@@ -93,7 +93,11 @@ const COLUMNS = [
   "set",
   "reps",
   "weight_lb",
+  "assist_lb",
   "duration",
+  "session_rpe",
+  "last_set_rir",
+  "duration_min",
   "distance_mi",
   "run_time",
   "knee_during",
@@ -141,7 +145,7 @@ export async function buildExportCSV(): Promise<string> {
       for (const ex of exercises) {
         for (let i = 0; i < ex.sets; i += 1) {
           const s = log.data.sets[`${ex.id}_s${i}`];
-          if (!s || (!s.reps && !s.weight && !s.duration)) continue;
+          if (!s || (!s.reps && !s.weight && !s.duration && !s.assistWeight)) continue;
           wroteAny = true;
           rows.push({
             date: log.logged_at,
@@ -151,7 +155,13 @@ export async function buildExportCSV(): Promise<string> {
             set: i + 1,
             reps: s.reps ?? "",
             weight_lb: s.weight ?? "",
+            // Assistance keeps its own column so nothing ever sums it together
+            // with weight lifted.
+            assist_lb: s.assistWeight ?? "",
             duration: s.duration ?? "",
+            session_rpe: log.data.sessionRPE ?? "",
+            last_set_rir: log.data.lastSetRIR ?? "",
+            duration_min: log.data.durationMin ?? "",
           });
         }
       }

@@ -14,7 +14,13 @@ const L2_RDL = { sets: 3, reps: "10–12 reps", target: "95 lbs" };
 const L1_HIP_THRUST = { sets: 4, reps: "8–10 reps", target: "Loaded" };
 const L2_REV_LUNGE = { sets: 3, reps: "10 each leg", target: "Bodyweight → DBs" };
 const L1_LEG_PRESS = { sets: 4, reps: "12 reps", target: "235 lbs" };
-const U1_PULLUP = { sets: 4, reps: "4–6 reps", target: "55 lb assist", weighted: false };
+const U1_PULLUP = {
+  sets: 4,
+  reps: "4–6 reps",
+  target: "55 lb assist",
+  weighted: false,
+  loadType: "assistance" as const,
+};
 const BALANCE = { sets: 3, reps: "45 sec each leg", target: "Eyes closed", weighted: false, timed: true };
 
 // ── parsing ──────────────────────────────────────────────────────────────────
@@ -171,6 +177,52 @@ test("assisted pull-ups carry reps and never a load", () => {
   const p = prescribeSet({ exercise: U1_PULLUP, previous: { reps: "5", weight: "55" } });
   assert.equal(p.weight, undefined);
   assert.equal(p.reps, "5");
+});
+
+test("assisted pull-ups carry the assistance setting forward", () => {
+  const p = prescribeSet({
+    exercise: U1_PULLUP,
+    previous: { reps: "6", assistWeight: "55" },
+  });
+  assert.equal(p.assistWeight, "55");
+  assert.equal(p.reps, "6");
+  assert.equal(p.weight, undefined); // assistance is never external load
+});
+
+test("assistance is never reduced by the prefill — that call is the coach's", () => {
+  const p = prescribeSet({
+    exercise: U1_PULLUP,
+    previous: { reps: "6", assistWeight: "55" },
+    readiness: "yellow",
+  });
+  // A yellow day must not silently make pull-ups HARDER by cutting assistance.
+  assert.notEqual(Number(p.assistWeight), 45);
+  assert.equal(p.assistWeight, "55");
+});
+
+test("assistance seeds from the target before any set has logged one", () => {
+  const p = prescribeSet({ exercise: U1_PULLUP, previous: { reps: "6" } });
+  assert.equal(p.assistWeight, "55"); // from "55 lb assist"
+  assert.equal(p.source, "target");
+});
+
+test("a logged assistance setting beats the target", () => {
+  const p = prescribeSet({
+    exercise: U1_PULLUP,
+    previous: { reps: "6", assistWeight: "45" }, // she already chipped it down
+  });
+  assert.equal(p.assistWeight, "45");
+  assert.equal(p.source, "previous");
+});
+
+test("red day offers no assisted work either", () => {
+  const p = prescribeSet({
+    exercise: U1_PULLUP,
+    previous: { reps: "6", assistWeight: "55" },
+    readiness: "red",
+  });
+  assert.equal(p.assistWeight, undefined);
+  assert.equal(p.source, "reduced-for-readiness");
 });
 
 test("timed work carries its duration", () => {

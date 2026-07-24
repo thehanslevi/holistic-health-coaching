@@ -18,6 +18,13 @@ export type Exercise = {
   weighted?: boolean;
   /** true → duration text field per set instead of reps */
   timed?: boolean;
+  /**
+   * How this lift is loaded. "assistance" is the one that matters: the machine
+   * takes weight OFF her, so a lower number is harder and progress runs
+   * downward. Logging it as `weight` would make the coach read progress
+   * backwards. Defaults to external/bodyweight per `weighted`.
+   */
+  loadType?: "external" | "assistance" | "bodyweight" | "timed";
 };
 
 export type SessionKey = "L1" | "U1" | "L2" | "U2" | "C1" | "G1";
@@ -109,8 +116,8 @@ export const SESSIONS: Record<SessionKey, Session> = {
     exercises: [
       { id: "u1_bench", name: "Barbell Bench Press", sets: 4, reps: "8 reps", target: "70 lbs", note: "Primary upper press. Stay at 70 for 4×8 until every set is technically clean at 1–2 reps in reserve — then take 75 again (double progression). Maintain phase: no testing, no grinding reps. Next milestone 80–90." },
       { id: "u1_ohp", name: "Barbell Overhead Press", sets: 3, reps: "8 reps", target: "55 lbs", note: "PRIMARY vertical press (replaced the DB shoulder press). Working weight 55 (3×8). Ribs down, squeeze glutes, don't lean back into the low back. 1–2 reps in reserve. Next milestone 60." },
-      { id: "u1_pullup", name: "Assisted Pull-Up", sets: 4, reps: "4–6 reps", target: "55 lb assist", note: "The primary progression target — the biggest upper-body opportunity. ALTERNATE by rotation: WEEK A = assisted pull-ups only (this exercise). WEEK B = assisted pull-ups PLUS the eccentric work below. Don't do both every time — that just piles on fatigue. Chip the assistance down over months toward a first strict, unassisted pull-up. Full hang, chin over bar.", weighted: false },
-      { id: "u1_pullup_ecc", name: "Assisted Pull-Up — Eccentric (Week B only)", sets: 3, reps: "4–5 reps", target: "Lighter assist", note: "WEEK B ONLY — skip this on the Week A rotation. Same machine, set the assist LIGHTER than your working sets. Pull up normally, then lower for 4–5 sec. Eccentric overload builds the strength a free-bar eccentric would, no bar needed.", weighted: false },
+      { id: "u1_pullup", name: "Assisted Pull-Up", sets: 4, reps: "4–6 reps", target: "55 lb assist", note: "The primary progression target — the biggest upper-body opportunity. LOG THE ASSISTANCE WEIGHT every set: '4×6' means nothing without it, and it's the number that has to come down. Milestone: 4×6 clean at the current assist, then drop the assistance by the smallest increment the machine has. Don't drop it if reps fall below 4 or the last set has nothing left. ALTERNATE by rotation: WEEK A = assisted pull-ups only (this exercise). WEEK B = assisted pull-ups PLUS the eccentric work below. Chip the assistance down over months toward a first strict, unassisted pull-up. Full hang, chin over bar.", weighted: false, loadType: "assistance" },
+      { id: "u1_pullup_ecc", name: "Assisted Pull-Up — Eccentric (Week B only)", sets: 3, reps: "4–5 reps", target: "Lighter assist", note: "WEEK B ONLY — skip this on the Week A rotation. Same machine, set the assist LIGHTER (a lower number) than your working sets. Pull up normally, then lower for 4–5 sec. Log the assistance weight. Eccentric overload builds the strength a free-bar eccentric would, no bar needed.", weighted: false, loadType: "assistance" },
       { id: "u1_row", name: "Machine Row", sets: 3, reps: "10–12 reps", target: "85 lbs", note: "Working weight 85 (3×10–12). Fixed ROM removes the elbow tug of DB rows. Squeeze the shoulder blades, controlled return." },
       { id: "u1_face_pull", name: "Face Pull", sets: 3, reps: "15–20 reps", target: "Light cable/band", note: "Shoulder-health insurance: rotator cuff, lower traps, posture, rear delts. Rope or band at eye height, pull to the forehead, elbows high, external-rotate at the end. Light and strict — this is a health lift, not a strength lift.", weighted: false },
       { id: "u1_tricep", name: "Tricep (machine)", sets: 3, reps: "12 reps", target: "55 lbs", note: "Working weight 55 (3×12). Machine, not barbell — protects the prior elbow tweak. Flag if elbow pull returns." },

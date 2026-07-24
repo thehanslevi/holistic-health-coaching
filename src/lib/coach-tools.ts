@@ -166,6 +166,9 @@ const getExerciseProgression = betaTool({
         const s = row.data.sets[`${ex.id}_s${i}`];
         if (!s) continue;
         if (ex.timed && s.duration) sets.push(`${s.duration}${s.weight ? ` × ${s.weight}lb` : ""}`);
+        else if (ex.loadType === "assistance" && (s.reps || s.assistWeight))
+          // Spelled out: this is help being given, so DOWN is progress.
+          sets.push(`${s.reps ?? "?"} reps @ ${s.assistWeight ?? "?"}lb assist`);
         else if (s.reps || s.weight) sets.push(`${s.reps ?? "?"}×${s.weight ?? "BW"}`);
       }
       if (sets.length) lines.push(`${row.logged_at}: ${sets.join(" | ")}`);

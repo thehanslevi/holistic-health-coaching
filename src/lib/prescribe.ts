@@ -27,9 +27,16 @@ export type PrescribedExercise = {
   weighted?: boolean;
   /** true → logged as a duration rather than reps. */
   timed?: boolean;
+  /** "assistance" → the load is help being given, so lower is harder. */
+  loadType?: "external" | "assistance" | "bodyweight" | "timed";
 };
 
-export type LoggedSet = { reps?: string; weight?: string; duration?: string };
+export type LoggedSet = {
+  reps?: string;
+  weight?: string;
+  duration?: string;
+  assistWeight?: string;
+};
 
 export type ReadinessLevel = "green" | "yellow" | "red";
 
@@ -44,6 +51,7 @@ export type Prescription = {
   weight?: string;
   reps?: string;
   duration?: string;
+  assistWeight?: string;
   source: PrescriptionSource;
 };
 
@@ -86,6 +94,19 @@ export function parseTargetWeight(target: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * The assistance setting named in a target like "55 lb assist". Separate from
+ * `parseTargetWeight` on purpose — this number is help, not load, and must never
+ * flow into load logic.
+ */
+export function parseAssistWeight(target: string): number | null {
+  if (!target || !/assist/i.test(target)) return null;
+  const m = target.match(/(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /** Trim to something loadable, never rounding a reduction upward. */
 function roundDown(n: number, step = 5): number {
   if (n <= step) return Math.max(0, Math.floor(n));
@@ -122,7 +143,24 @@ export function prescribeSet(input: {
     };
   }
 
-  // Bodyweight / banded / assisted lifts: reps only, no load to get wrong.
+  // Assisted work: carry the assistance setting so she starts where she left
+  // off. It is never treated as load — reducing it is what progress looks like,
+  // and that call belongs to the coach, not to a prefill.
+  if (exercise.loadType === "assistance") {
+    if (readiness === "red") return { source: "reduced-for-readiness" };
+    // Fall back to the assistance named in the target, so the field is useful
+    // before any set has been logged with one.
+    const fallback = parseAssistWeight(exercise.target);
+    const assist = previous?.assistWeight ?? (fallback != null ? String(fallback) : undefined);
+    if (!previous?.reps && !assist) return { source: "none" };
+    return {
+      ...(previous?.reps ? { reps: previous.reps } : {}),
+      ...(assist ? { assistWeight: assist } : {}),
+      source: previous?.assistWeight ? "previous" : "target",
+    };
+  }
+
+  // Bodyweight / banded lifts: reps only, no load to get wrong.
   if (!weighted) {
     if (readiness === "red") return { source: "reduced-for-readiness" };
     return previous?.reps ? { reps: previous.reps, source: "previous" } : { source: "none" };
