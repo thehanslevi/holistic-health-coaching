@@ -274,8 +274,38 @@ export function nextStrengthSession(lastCompleted: SessionKey | null): SessionKe
   return SESSION_SEQUENCE[(i + 1) % SESSION_SEQUENCE.length];
 }
 
+/**
+ * Where she trains. The leg press in particular is not the same machine across
+ * branches, so a load is only comparable to itself within a facility.
+ */
+export const FACILITIES = [
+  "Bed-Stuy YMCA",
+  "Chinatown YMCA",
+  "14th Street YMCA",
+  "Other",
+] as const;
+
+/** Shared fuel options — the same question wherever it's asked. */
+export const FUEL_OPTIONS = [
+  { value: "protein_carbs", label: "Protein + carbs" },
+  { value: "protein", label: "Protein only" },
+  { value: "carbs", label: "Carbs only" },
+  { value: "nothing", label: "Nothing" },
+  { value: "unsure", label: "Not sure" },
+] as const;
+
+export const FUEL_TIMING_OPTIONS = [
+  { value: "0-30min", label: "<30 min" },
+  { value: "30-60min", label: "30–60" },
+  { value: "60-120min", label: "1–2 hr" },
+  { value: "2h+", label: "2 hr+" },
+] as const;
+
 export const XTRAIN_MODALITIES = [
   "Zone 2 bike",
+  // Commuting by bike is training, not transport — logging it here means it
+  // counts toward the aerobic dose like anything else.
+  "Bike commute",
   "Swim",
   "Sauna",
   "Dance",

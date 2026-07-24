@@ -12,6 +12,15 @@ export type SetEntry = {
   assistWeight?: string;
 };
 
+/**
+ * What was in the tank before training. On semaglutide hunger isn't a reliable
+ * signal, so whether she actually ate has to be recorded rather than inferred.
+ * Deliberately coarse — this is fuel context for coaching, not food logging.
+ */
+export type FuelStatus = "protein_carbs" | "protein" | "carbs" | "nothing" | "unsure";
+export type FuelTiming = "0-30min" | "30-60min" | "60-120min" | "2h+";
+export type PreFuel = { status: FuelStatus | null; timing?: FuelTiming | null };
+
 export type SessionLogData = {
   date: string;
   sessionKey: string;
@@ -40,6 +49,16 @@ export type SessionLogData = {
    * -1 = failed or form broke. Gates whether a lift should progress.
    */
   lastSetRIR?: number | null;
+  /** What she ate before this session. */
+  preFuel?: PreFuel;
+  /**
+   * Which gym. Machines differ between branches — the leg press especially —
+   * so loads are only comparable within a facility. Without this, a branch
+   * change reads as a strength change.
+   */
+  facility?: string | null;
+  /** Anything about the specific machine worth remembering (seat, stack, plates). */
+  machineNote?: string;
 };
 
 export type RunLogData = {
@@ -53,6 +72,21 @@ export type RunLogData = {
   run_am_knee: string;
   run_am_ankle: string;
   run_notes: string;
+  /** Continuous, walk-run, intervals — a 2-mile walk-run isn't a 2-mile run. */
+  run_type?: "continuous" | "walk-run" | "intervals" | "easy jog" | null;
+  /**
+   * How the ankle behaved the next morning beyond a 0–10 score. A 2/10 that
+   * clears in minutes and a 2/10 that lingers are different decisions.
+   */
+  run_am_stiffness?: "none" | "clears quickly" | "lingers" | "limp" | null;
+  /** Did her gait change mid-run? The earliest sign to stop adding distance. */
+  run_gait_change?: boolean | null;
+  /** Calf stretches / ice afterwards — the habit protecting the tendon. */
+  run_protocol_done?: boolean | null;
+  run_surface?: "treadmill" | "road" | "track" | "trail" | "mixed" | null;
+  run_terrain?: "flat" | "rolling" | "hilly" | null;
+  /** What she ate before the run. */
+  preFuel?: PreFuel;
 };
 
 export type XtrainLogData = {
@@ -62,6 +96,8 @@ export type XtrainLogData = {
   duration: string;
   intensity: string;
   notes: string;
+  /** What she ate beforehand. */
+  preFuel?: PreFuel;
 };
 
 export type LogKind = "session" | "run" | "xtrain";
@@ -137,6 +173,12 @@ export type Recovery = {
   post_run_protocol: boolean | null;
   vipassana: number | null;
   sleep_quality: number | null;
+  /** What she ate after training — appetite is often suppressed when the
+   *  recovery demand is highest, so this is worth recording rather than guessing. */
+  post_training_fuel: FuelStatus | null;
+  /** Did yesterday clear the protein floor? Coarse on purpose: a recovery
+   *  context flag, never calorie or macro tracking. */
+  protein_floor: "yes" | "close" | "no" | "unknown" | null;
   note: string | null;
 };
 

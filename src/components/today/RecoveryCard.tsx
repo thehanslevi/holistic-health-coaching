@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
-import { todayISO } from "@/lib/program";
-import type { Recovery } from "@/lib/types";
+import { FUEL_OPTIONS, todayISO } from "@/lib/program";
+import type { FuelStatus, Recovery } from "@/lib/types";
+import { ChipGroup } from "@/components/ui";
 
 function Toggle({
   on,
@@ -43,6 +44,8 @@ export default function RecoveryCard({ fuelingDay }: { fuelingDay: boolean }) {
       post_run_protocol: null,
       vipassana: null,
       sleep_quality: null,
+      post_training_fuel: null,
+      protein_floor: null,
       note: null,
       ...prev,
       ...fields,
@@ -81,6 +84,36 @@ export default function RecoveryCard({ fuelingDay }: { fuelingDay: boolean }) {
           on={rec?.post_run_protocol ?? null}
           onClick={() => patch({ post_run_protocol: !rec?.post_run_protocol })}
           label="Done"
+        />
+      </div>
+
+      {/* Post-training fuel lives here rather than at save, because after a
+          session she doesn't know yet. Appetite is unreliable on semaglutide,
+          so this gets recorded instead of assumed. */}
+      {fuelingDay && (
+        <div className="py-2 border-t border-line">
+          <div className="label !text-[9px] mb-2">Eaten since training</div>
+          <ChipGroup
+            cols={3}
+            options={FUEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            value={rec?.post_training_fuel ?? null}
+            onChange={(v) => patch({ post_training_fuel: (v as FuelStatus) ?? null })}
+          />
+        </div>
+      )}
+
+      <div className="py-2 border-t border-line">
+        <div className="label !text-[9px] mb-2">Protein floor yesterday</div>
+        <ChipGroup
+          cols={4}
+          options={[
+            { value: "yes", label: "Yes" },
+            { value: "close", label: "Close" },
+            { value: "no", label: "No" },
+            { value: "unknown", label: "Not sure" },
+          ]}
+          value={rec?.protein_floor ?? null}
+          onChange={(v) => patch({ protein_floor: (v as Recovery["protein_floor"]) ?? null })}
         />
       </div>
     </div>

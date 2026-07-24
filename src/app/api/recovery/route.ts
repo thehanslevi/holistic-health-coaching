@@ -3,7 +3,15 @@ import { checkAuth, errorResponse } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { todayISO } from "@/lib/day";
 
-const FIELDS = ["fueled", "post_run_protocol", "vipassana", "sleep_quality", "note"] as const;
+const FIELDS = [
+  "fueled",
+  "post_run_protocol",
+  "vipassana",
+  "sleep_quality",
+  "post_training_fuel",
+  "protein_floor",
+  "note",
+] as const;
 
 export async function GET(req: NextRequest) {
   const unauthorized = checkAuth(req);

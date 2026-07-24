@@ -7,14 +7,25 @@ import { prescribeSet } from "@/lib/prescribe";
 import { formatLogAsText } from "@/lib/format";
 import {
   EXERCISE_THERAPY,
+  FACILITIES,
+  FUEL_OPTIONS,
+  FUEL_TIMING_OPTIONS,
   PT_CIRCUIT,
   SESSIONS,
   todayISO,
   type Exercise,
   type SessionKey,
 } from "@/lib/program";
-import type { Checkin, LogRow, Readiness, SessionLogData, SetEntry } from "@/lib/types";
-import { Button, Delta, Field, SectionLabel, inputClass } from "@/components/ui";
+import type {
+  Checkin,
+  FuelStatus,
+  FuelTiming,
+  LogRow,
+  Readiness,
+  SessionLogData,
+  SetEntry,
+} from "@/lib/types";
+import { Button, ChipGroup, Delta, Field, SectionLabel, inputClass } from "@/components/ui";
 import { useApp } from "@/components/AppShell";
 import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
 import { useVoiceRecorder } from "@/lib/useVoiceRecorder";
@@ -504,6 +515,42 @@ export default function SessionLogger({
               className={`${inputClass} stat-num !text-[22px] text-center`}
             />
           </Field>
+        </div>
+
+        {/* Asked before the work, while the answer is still known. Optional —
+            nothing here blocks starting. */}
+        <div className="mt-5 border border-line p-3.5">
+          <SectionLabel>Before you start</SectionLabel>
+          <div className="label !text-[9px] mt-2 mb-2">Fuel beforehand</div>
+          <ChipGroup
+            cols={3}
+            options={FUEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            value={log.preFuel?.status ?? null}
+            onChange={(v) =>
+              setField("preFuel", { ...log.preFuel, status: (v as FuelStatus) ?? null })
+            }
+          />
+          {log.preFuel?.status && log.preFuel.status !== "nothing" && (
+            <>
+              <div className="label !text-[9px] mt-3 mb-2">How long before</div>
+              <ChipGroup
+                cols={4}
+                options={FUEL_TIMING_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                value={log.preFuel?.timing ?? null}
+                onChange={(v) =>
+                  setField("preFuel", { ...log.preFuel, status: log.preFuel?.status ?? null, timing: (v as FuelTiming) ?? null })
+                }
+              />
+            </>
+          )}
+
+          <div className="label !text-[9px] mt-4 mb-2">Which gym</div>
+          <ChipGroup
+            cols={2}
+            options={FACILITIES.map((f) => ({ value: f, label: f.replace(" YMCA", "") }))}
+            value={log.facility ?? null}
+            onChange={(v) => setField("facility", v)}
+          />
         </div>
 
         <div className="mt-5 border border-line p-3.5">

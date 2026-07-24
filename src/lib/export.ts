@@ -98,6 +98,14 @@ const COLUMNS = [
   "session_rpe",
   "last_set_rir",
   "duration_min",
+  "facility",
+  "pre_fuel",
+  "pre_fuel_timing",
+  "run_type",
+  "run_surface",
+  "run_am_stiffness",
+  "run_gait_change",
+  "run_protocol_done",
   "distance_mi",
   "run_time",
   "knee_during",
@@ -162,6 +170,9 @@ export async function buildExportCSV(): Promise<string> {
             session_rpe: log.data.sessionRPE ?? "",
             last_set_rir: log.data.lastSetRIR ?? "",
             duration_min: log.data.durationMin ?? "",
+            facility: log.data.facility ?? "",
+            pre_fuel: log.data.preFuel?.status ?? "",
+            pre_fuel_timing: log.data.preFuel?.timing ?? "",
           });
         }
       }
@@ -184,6 +195,13 @@ export async function buildExportCSV(): Promise<string> {
         ankle_during: d.run_ankle ?? "",
         knee_next_am: d.run_am_knee ?? "",
         ankle_next_am: d.run_am_ankle ?? "",
+        run_type: d.run_type ?? "",
+        run_surface: [d.run_surface, d.run_terrain].filter(Boolean).join(" / "),
+        run_am_stiffness: d.run_am_stiffness ?? "",
+        run_gait_change: d.run_gait_change == null ? "" : d.run_gait_change ? "yes" : "no",
+        run_protocol_done: d.run_protocol_done == null ? "" : d.run_protocol_done ? "yes" : "no",
+        pre_fuel: d.preFuel?.status ?? "",
+        pre_fuel_timing: d.preFuel?.timing ?? "",
         notes: d.run_notes ?? "",
       });
     } else if (isXtrainLog(log)) {
@@ -194,6 +212,7 @@ export async function buildExportCSV(): Promise<string> {
         modality: d.modality ?? "",
         duration: d.duration ?? "",
         intensity: d.intensity ?? "",
+        pre_fuel: d.preFuel?.status ?? "",
         notes: d.notes ?? "",
       });
     }

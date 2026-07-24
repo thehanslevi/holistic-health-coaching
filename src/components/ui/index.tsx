@@ -206,6 +206,46 @@ export function Segmented<T extends string>({
 export const inputClass =
   "w-full bg-surface border border-line-strong px-3.5 py-2.5 text-sm text-ink outline-none focus:border-accent transition-colors";
 
+/**
+ * A row of tap-once options. Built for questions asked mid-workout or straight
+ * after a run, where a dropdown is too slow and a text field never gets filled.
+ * Tapping the selected option clears it — nothing here is mandatory.
+ */
+export function ChipGroup({
+  options,
+  value,
+  onChange,
+  cols = 3,
+}: {
+  options: { value: string; label: string }[];
+  value?: string | null;
+  onChange: (v: string | null) => void;
+  cols?: 2 | 3 | 4;
+}) {
+  const grid = cols === 2 ? "grid-cols-2" : cols === 4 ? "grid-cols-4" : "grid-cols-3";
+  return (
+    <div className={`grid ${grid} gap-1.5`}>
+      {options.map((o) => {
+        const on = value === o.value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(on ? null : o.value)}
+            className={`display text-[11px] tracking-[0.04em] border px-1.5 py-2 cursor-pointer transition-colors ${
+              on
+                ? "bg-accent text-accent-ink border-accent"
+                : "border-line-strong text-muted hover:text-ink"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Field({
   label,
   children,

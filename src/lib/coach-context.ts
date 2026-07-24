@@ -162,6 +162,8 @@ export async function buildCoachCore(): Promise<string> {
     post_run_protocol: boolean | null;
     vipassana: number | null;
     sleep_quality: number | null;
+    post_training_fuel: string | null;
+    protein_floor: string | null;
   } | null;
   if (recovery) {
     const bits = [
@@ -170,6 +172,8 @@ export async function buildCoachCore(): Promise<string> {
         ? `ankle post-run protocol: ${recovery.post_run_protocol ? "done" : "not done"}`
         : null,
       recovery.sleep_quality != null ? `sleep quality: ${recovery.sleep_quality}/5` : null,
+      recovery.post_training_fuel ? `post-training fuel: ${recovery.post_training_fuel}` : null,
+      recovery.protein_floor ? `protein floor yesterday: ${recovery.protein_floor}` : null,
     ].filter(Boolean);
     if (bits.length) lines.push(`Recovery check (${recovery.date}): ${bits.join(", ")}.`);
   }
@@ -319,6 +323,8 @@ export async function buildCoachContext(): Promise<{
     post_run_protocol: boolean | null;
     vipassana: number | null;
     sleep_quality: number | null;
+    post_training_fuel: string | null;
+    protein_floor: string | null;
   } | null;
   if (recovery) {
     const bits = [
@@ -327,6 +333,8 @@ export async function buildCoachContext(): Promise<{
         ? `ankle post-run protocol: ${recovery.post_run_protocol ? "done" : "not done"}`
         : null,
       recovery.sleep_quality != null ? `sleep quality: ${recovery.sleep_quality}/5` : null,
+      recovery.post_training_fuel ? `post-training fuel: ${recovery.post_training_fuel}` : null,
+      recovery.protein_floor ? `protein floor yesterday: ${recovery.protein_floor}` : null,
     ].filter(Boolean);
     if (bits.length) lines.push(`Recovery check (${recovery.date}): ${bits.join(", ")}.`);
   }

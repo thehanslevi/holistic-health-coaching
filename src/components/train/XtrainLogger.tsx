@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { api } from "@/lib/client";
 import { formatLogAsText } from "@/lib/format";
-import { XTRAIN_MODALITIES, todayISO } from "@/lib/program";
-import type { LogRow, XtrainLogData } from "@/lib/types";
-import { Button, Field, ScreenHeader, inputClass } from "@/components/ui";
+import { FUEL_OPTIONS, XTRAIN_MODALITIES, todayISO } from "@/lib/program";
+import type { FuelStatus, LogRow, XtrainLogData } from "@/lib/types";
+import { Button, ChipGroup, Field, ScreenHeader, inputClass } from "@/components/ui";
 import SavedSummary from "@/components/train/SavedSummary";
 import { useApp } from "@/components/AppShell";
 
@@ -91,6 +91,15 @@ export default function XtrainLogger({
         <input type="number" inputMode="decimal" step="any" placeholder="e.g. 30" value={data.duration}
           onChange={(e) => set("duration", e.target.value)} className={`${inputClass} num`} />
       </Field>
+      <div className="mb-3">
+        <div className="label mb-1.5">Fuel beforehand (optional)</div>
+        <ChipGroup
+          cols={3}
+          options={FUEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          value={data.preFuel?.status ?? null}
+          onChange={(v) => set("preFuel", { ...data.preFuel, status: (v as FuelStatus) ?? null })}
+        />
+      </div>
       <Field label="Intensity / how it felt (optional)" className="mb-3">
         <input type="text" placeholder="easy, moderate, restorative..." value={data.intensity}
           onChange={(e) => set("intensity", e.target.value)} className={inputClass} />
