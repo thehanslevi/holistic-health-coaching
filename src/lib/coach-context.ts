@@ -132,8 +132,14 @@ export async function buildCoachCore(): Promise<string> {
       // more samples land — that same 28.7 was later corrected to 42.4. A reading
       // is provisional until the day is over.
       if (health.date === today) {
+        // Same-day sleep is the dangerous one — it consolidates over the morning,
+        // so an early figure can be a third of the real total. Keep steps (stable
+        // same-day) but do not hand over a sleep/HRV number to be quoted.
+        const stableBits = [
+          health.steps != null ? `${health.steps} steps` : null,
+        ].filter(Boolean);
         lines.push(
-          `Apple Health (today, ${health.date}): ${bits.join(", ")}. Today's numbers can still be revised upward as more samples sync, so treat them as provisional — real but not final.`,
+          `Apple Health for today (${health.date}) is PROVISIONAL — Apple Health is still consolidating last night. Sleep especially is often only partly recorded this early and can more than double by midday; HRV and resting HR also swing as samples land. Do NOT quote today's sleep, HRV, or resting-HR figure or build a call on it${stableBits.length ? ` (steps, ${stableBits.join(", ")}, are steadier)` : ""}. For a recovery read, call get_health_series — it separates today from the settled readings — and lean on her readiness check-in.`,
         );
       } else {
         lines.push(

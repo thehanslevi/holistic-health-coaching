@@ -51,6 +51,8 @@ export async function getOrCreateDailyBrief(forceRefresh = false): Promise<{
 
 There is NO fixed weekday schedule. Recommend today's session from the rolling rotation and how I'm actually recovering — never from what day of the week it is. Go look before you decide: what I've actually completed in the last several days (so you know where I am in the strength rotation and whether I've stacked hard days), how my knee and ankle answered the last thing that loaded them, my recovery against my own baseline, and any open decision of yours that's now due. get_program gives you the rotation, the ~7–10 day cycle targets, and the sequencing rules. Two or three lookups is normal. Do not write this from the summary alone.
 
+TODAY'S OVERNIGHT NUMBERS ARE NOT REAL YET. It is early; Apple Health is still consolidating last night. Sleep in particular often shows as a partial block right now and will be two or three times higher by lunchtime, and same-day HRV and resting HR swing as more samples land. get_health_series marks today's row PROVISIONAL and gives you the settled readings separately — use those. NEVER quote a specific same-day sleep, HRV, or resting-HR figure, and never build the day's call on one; you have said "you slept three hours" off a number that was eight by noon. If you need a recovery read this morning, use my readiness check-in (I logged it myself) and the trend of settled days, and speak in direction ("last night ran short", "HRV's been low this week"), not a number.
+
 If a decision of yours is due or overtaken, close it (close_decision) and let that drive today's line. If today's call is one you'll want to hold me to for more than today, record it (record_decision).
 
 Then write the brief itself.

@@ -1,5 +1,6 @@
 import { betaTool } from "@anthropic-ai/sdk/helpers/beta/json-schema";
-import { daysAgoISO } from "@/lib/day";
+import { daysAgoISO, todayISO } from "@/lib/day";
+import { formatHealthSeries } from "@/lib/health-series";
 import { formatLogAsText } from "@/lib/format";
 import {
   SESSIONS,
@@ -34,16 +35,6 @@ function truncate(text: string, label: string): string {
   if (text.length <= MAX_TOOL_CHARS) return text;
   return `${text.slice(0, MAX_TOOL_CHARS)}\n\n[…${label} truncated. Narrow the window or add a filter to see more.]`;
 }
-
-const median = (ns: number[]): number => {
-  if (!ns.length) return 0;
-  const s = [...ns].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-};
-
-const mean = (ns: number[]): number =>
-  ns.length ? ns.reduce((a, b) => a + b, 0) / ns.length : 0;
 
 // Dates resolve in the athlete's timezone, not the server's — see lib/day.ts.
 
@@ -286,22 +277,7 @@ const getHealthSeries = betaTool({
       .filter((r) => r[metric] != null)
       .map((r) => ({ date: String(r.date), value: Number(r[metric]) }));
 
-    if (!rows.length) return `No ${metric} readings in the last ${window} days.`;
-
-    const values = rows.map((r) => r.value);
-    const recent = values.slice(0, 7);
-    const round = (n: number) => Math.round(n * 10) / 10;
-
-    const stats = [
-      `${metric} over the last ${window} days — ${rows.length} readings.`,
-      `Baseline (median of window): ${round(median(values))}`,
-      `Last 7 readings mean: ${round(mean(recent))}`,
-      `Window mean: ${round(mean(values))} | min: ${round(Math.min(...values))} | max: ${round(Math.max(...values))}`,
-      `Most recent: ${round(rows[0].value)} on ${rows[0].date}`,
-    ].join("\n");
-
-    const series = rows.map((r) => `${r.date}: ${round(r.value)}`).join("\n");
-    return truncate(`${stats}\n\nDaily readings (newest first):\n${series}`, "series");
+    return truncate(formatHealthSeries(metric, rows, todayISO(), window), "series");
   },
 });
 
