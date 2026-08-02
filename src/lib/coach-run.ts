@@ -85,6 +85,10 @@ export async function runCoach({
     for (const block of message.content) {
       if (block.type === "tool_use") lookups.push({ name: block.name, input: block.input });
     }
+    // The runner doesn't auto-resume a server-tool pause; push it back to finish.
+    if (message.stop_reason === "pause_turn") {
+      runner.pushMessages({ role: "assistant", content: message.content });
+    }
   }
 
   const text = (final?.content ?? [])

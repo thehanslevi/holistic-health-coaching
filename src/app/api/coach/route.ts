@@ -143,7 +143,15 @@ export async function POST(req: NextRequest) {
                 send(
                   frame({ type: "status", text: toolStatusLabel(block.name, block.input) }),
                 );
+              } else if (block.type === "server_tool_use" && block.name === "web_search") {
+                send(frame({ type: "status", text: "Searching the web…" }));
               }
+            }
+            // The tool runner does NOT auto-resume a server-tool pause. A turn
+            // with several web searches can stop with stop_reason "pause_turn";
+            // push it back so the coach finishes instead of truncating.
+            if (finalMessage.stop_reason === "pause_turn") {
+              runner.pushMessages({ role: "assistant", content: finalMessage.content });
             }
           }
 

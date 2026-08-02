@@ -660,8 +660,14 @@ const READ_TOOLS = [queryLogs, getExerciseProgression, getRunHistory, getHealthS
 const WRITE_TOOLS = [editProgram, setExerciseTarget];
 const JOURNAL_TOOLS = [recordDecision, closeDecision, getDecisionHistory];
 
+// Server-side web search (Anthropic-hosted; executes on their infra, so no run
+// function and no beta header). Chat only — lets the coach pull current
+// best-practice, technique, or research when a question isn't answerable from
+// its training or her own logs. The brief stays on her data and off the web.
+const webSearch = { type: "web_search_20260209", name: "web_search", max_uses: 4 } as const;
+
 /** Chat. She's present, sees the reasoning, and can answer back. Everything on. */
-export const COACH_TOOLS = [...READ_TOOLS, ...WRITE_TOOLS, ...JOURNAL_TOOLS];
+export const COACH_TOOLS = [...READ_TOOLS, ...WRITE_TOOLS, ...JOURNAL_TOOLS, webSearch];
 
 /**
  * The unattended surfaces — the 8am brief and the weekly review. These run on a
