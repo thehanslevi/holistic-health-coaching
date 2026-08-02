@@ -275,17 +275,21 @@ export function suggestReadiness(
   const reasons: string[] = [];
   let score = 0; // 0 = green; negative = more caution
 
-  // Last night's sleep (today's row, else the most recent).
-  const sleepRow = health.find((h) => h.date === today && h.sleep_hours != null)
-    ?? health.find((h) => h.sleep_hours != null);
+  // Never reason from today's row: Apple Health re-syncs the current day for
+  // hours, so a morning read is routinely a partial (or, if the watch hasn't
+  // synced at all, stale). Quoting it produced "you slept 4.75h" off an
+  // unsynced number. Judge from settled readings + her own check-in instead.
+  const settled = health.filter((h) => h.date !== today);
+
+  const sleepRow = settled.find((h) => h.sleep_hours != null);
   if (sleepRow?.sleep_hours != null) {
     const s = sleepRow.sleep_hours;
     if (s < 5) { score -= 2; reasons.push(`sleep ${s}h`); }
     else if (s < 6) { score -= 1; reasons.push(`sleep ${s}h`); }
   }
 
-  // HRV today vs the trailing baseline (a meaningful drop = under-recovery).
-  const hrvs = health.filter((h) => h.hrv != null).map((h) => h.hrv as number);
+  // HRV vs the trailing baseline (a meaningful drop = under-recovery).
+  const hrvs = settled.filter((h) => h.hrv != null).map((h) => h.hrv as number);
   if (hrvs.length >= 4) {
     const todayHrv = hrvs[0];
     const baseArr = hrvs.slice(1, 8);

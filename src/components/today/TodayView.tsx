@@ -61,6 +61,19 @@ const READINESS_META: Record<
 // button words change.
 const FEEL_LABEL: Record<Readiness, string> = { green: "Good", yellow: "Okay", red: "Low" };
 
+// Human "6h ago" for a health-sync timestamp, so stale data is obvious.
+function relTime(iso?: string | null): string {
+  if (!iso) return "never";
+  const ms = Date.now() - Date.parse(iso);
+  if (Number.isNaN(ms)) return "unknown";
+  const m = Math.round(ms / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
 function PendingRunCard({ run }: { run: PendingRun }) {
   const { refreshLogs } = useApp();
   const [amKnee, setAmKnee] = useState("");
@@ -179,12 +192,27 @@ export default function TodayView() {
   };
 
   // Apple Health
+  const [healthRefreshing, setHealthRefreshing] = useState(false);
+  const loadHealth = useCallback(
+    () => api<HealthRow[]>("/api/health").then(setHealth).catch(() => {}),
+    [],
+  );
   useEffect(() => {
-    api<HealthRow[]>("/api/health")
-      .then(setHealth)
-      .catch(() => {});
-  }, []);
+    loadHealth();
+  }, [loadHealth]);
+  const refreshHealth = async () => {
+    setHealthRefreshing(true);
+    try {
+      await loadHealth();
+    } finally {
+      setHealthRefreshing(false);
+    }
+  };
   const latestHealth = health[0] ?? null;
+  // Today's row is provisional: Apple Health re-syncs the current day for hours,
+  // and if the watch hasn't synced it may be missing or stale. Track freshness so
+  // the numbers are never shown as settled fact without a way to refresh.
+  const healthIsToday = latestHealth?.date === today;
 
   // Menstrual cycle (derived phase)
   const [cycle, setCycle] = useState<CycleState | null>(null);
@@ -282,7 +310,7 @@ export default function TodayView() {
         </div>
         {!checkin && suggestion ? (
           <div className="text-[13px] text-muted leading-snug mt-3.5">
-            Coach&apos;s leaning {FEEL_LABEL[suggestion.level]} — {suggestion.reasons.join(", ")}. Tap
+            Coach&apos;s leaning {FEEL_LABEL[suggestion.level]}: {suggestion.reasons.join(", ")}. Tap
             to confirm or overrule.
           </div>
         ) : checkin ? (
@@ -300,27 +328,47 @@ export default function TodayView() {
               latestHealth.hrv != null ||
               latestHealth.resting_hr != null);
           if (!chip && !hasHealth) return null;
+          const numCls = healthIsToday ? "text-faint" : "text-muted"; // dim provisional
           return (
-            <div className="flex gap-3.5 flex-wrap mt-3.5 pt-3 border-t border-line text-[11px] text-faint">
-              {chip && (
-                <span>
-                  cycle <span className="num text-muted">{chip}</span>
-                </span>
-              )}
-              {latestHealth?.sleep_hours != null && (
-                <span>
-                  sleep <span className="num text-muted">{latestHealth.sleep_hours.toFixed(1)}</span>h
-                </span>
-              )}
-              {latestHealth?.hrv != null && (
-                <span>
-                  HRV <span className="num text-muted">{Math.round(latestHealth.hrv)}</span>
-                </span>
-              )}
-              {latestHealth?.resting_hr != null && (
-                <span>
-                  RHR <span className="num text-muted">{Math.round(latestHealth.resting_hr)}</span>
-                </span>
+            <div className="mt-3.5 pt-3 border-t border-line">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex gap-3.5 flex-wrap text-[11px] text-faint">
+                  {chip && (
+                    <span>
+                      cycle <span className="num text-muted">{chip}</span>
+                    </span>
+                  )}
+                  {latestHealth?.sleep_hours != null && (
+                    <span>
+                      sleep <span className={`num ${numCls}`}>{latestHealth.sleep_hours.toFixed(1)}</span>h
+                    </span>
+                  )}
+                  {latestHealth?.hrv != null && (
+                    <span>
+                      HRV <span className={`num ${numCls}`}>{Math.round(latestHealth.hrv)}</span>
+                    </span>
+                  )}
+                  {latestHealth?.resting_hr != null && (
+                    <span>
+                      RHR <span className={`num ${numCls}`}>{Math.round(latestHealth.resting_hr)}</span>
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={refreshHealth}
+                  disabled={healthRefreshing}
+                  className="label !text-[9px] shrink-0 !text-faint hover:!text-accent transition-colors cursor-pointer disabled:opacity-50"
+                  aria-label="Sync health data"
+                >
+                  {healthRefreshing ? "SYNCING…" : "⟳ SYNC"}
+                </button>
+              </div>
+              {hasHealth && (
+                <div className="text-[10px] text-faint mt-1.5">
+                  {healthIsToday
+                    ? `Today still settling · synced ${relTime(latestHealth?.updated_at)}`
+                    : `Not synced today — showing ${latestHealth?.date} (${relTime(latestHealth?.updated_at)}). Tap Sync.`}
+                </div>
               )}
             </div>
           );
