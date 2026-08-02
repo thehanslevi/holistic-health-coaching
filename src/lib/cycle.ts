@@ -107,12 +107,32 @@ export function deriveCycleState(
 }
 
 /**
- * One-line coach-facing cycle summary — only on a bleeding day. Between periods
- * the phase estimate is a weak signal on an irregular cycle (2025 evidence:
- * phase periodization has small effects), so we don't feed it to the coach and
- * invite over-use; sleep, food, and consistency matter far more.
+ * Short UI chip, e.g. "luteal ~d23" or "period d2". Surfaces the textbook phase
+ * name (the chosen model) as one modest factor among sleep/HRV/RHR, never a
+ * headline. Returns null when there's no cycle data to show.
+ */
+export function cycleChip(s: CycleState): string | null {
+  if (s.bleedingToday && s.cycleDay != null) return `period d${s.cycleDay}`;
+  if (s.phase === "unknown" || s.cycleDay == null) return s.bleedingToday ? "period" : null;
+  return `${s.phase} ~d${s.cycleDay}`;
+}
+
+/**
+ * One-line coach-facing cycle summary, textbook follicular/luteal model. Fed to
+ * the coach every day there's cycle data so the phase can inform the week's
+ * emphasis — but always flagged as an estimate on an irregular cycle, with how
+ * she feels overriding it for the day.
  */
 export function cycleContextLine(s: CycleState): string | null {
-  if (!s.bleedingToday) return null;
-  return `Menstruating today (period day ${s.cycleDay ?? "?"}). Honor how she feels: lighter is fine if she's low, otherwise train as normal. Do not train around cycle phase.`;
+  if (s.bleedingToday) {
+    return `Menstruating (period day ${s.cycleDay ?? "?"}). Energy is often lowest the first day or two: lighter is fine if she's low, otherwise train as normal.`;
+  }
+  if (s.phase === "unknown" || s.cycleDay == null) return null;
+  const byPhase: Record<Exclude<CyclePhase, "unknown">, string> = {
+    menstrual: `Likely early in the cycle (~day ${s.cycleDay}).`,
+    follicular: `Likely follicular (~day ${s.cycleDay}). Recovery and strength tolerance are good, a window to push intensity or attempt a PR.`,
+    ovulatory: `Likely around ovulation (~day ${s.cycleDay}). Strength often peaks; good for a hard effort.`,
+    luteal: `Likely luteal (~day ${s.cycleDay}). Perceived exertion runs higher and recovery is a little slower: favor volume and technique over maxes, and skip max attempts in late luteal.`,
+  };
+  return `${byPhase[s.phase]} Phase is an estimate on an irregular cycle; how she feels overrides it for the day.`;
 }

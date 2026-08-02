@@ -2,6 +2,7 @@ import { runCoach } from "@/lib/coach-run";
 import { COACH_UNATTENDED_TOOLS } from "@/lib/coach-tools";
 import { supabase } from "@/lib/supabase";
 import { todayISO } from "@/lib/day";
+import { rewriteInVoice } from "@/lib/voice";
 
 /** Full weekday name for a YYYY-MM-DD date. Anchored at noon UTC so the calendar
  *  day is stable regardless of where the code runs. */
@@ -69,7 +70,9 @@ LENGTH IS A HARD CONSTRAINT: 40 words maximum, two sentences maximum. This is a 
 
 Plain text only. No preamble, no headers, no lists. Return only the brief — nothing about what you looked up. Obey the voice and banned-word rules in your instructions.`,
   });
-  const { text: content } = run;
+  // Voice gate: the brief lands on her lock screen, so it's the surface where a
+  // single AI-ism is most glaring. Rewrite to coach voice, holding the 40-word cap.
+  const content = await rewriteInVoice(run.text, { maxWords: 40 });
   if (content) {
     await db.from("hrl_briefs").upsert(
       {

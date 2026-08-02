@@ -246,7 +246,7 @@ export const ROLLING_TARGETS = {
   /** Easy aerobic (predominantly Zone 2) sessions per week. */
   zone2Min: 2,
   zone2Max: 3,
-  /** Run progressions per week, when the right ankle is Green. */
+  /** Run progressions per week. */
   run: 1,
   /** Complete physical recovery days per week — exactly one. More than one full
    *  rest day reads as under-training, not extra recovery. */
@@ -259,7 +259,7 @@ export const ROLLING_TARGETS = {
 /** Sequencing rules the coach applies when recommending the next session. */
 export const ROLLING_RULES: string[] = [
   "Don't prescribe two demanding lower-body sessions back to back.",
-  "Don't place a run progression right after a demanding lower day unless knee and ankle are clearly Green.",
+  "Prefer not to place a run progression immediately after a demanding lower day.",
   "After two or three hard/moderate days in a row, recommend an easy aerobic/PT day or full recovery.",
   "Easy swimming, walking, mobility, and PT can go between demanding sessions.",
   "Keep roughly 1–3 reps in reserve on most resistance sets.",

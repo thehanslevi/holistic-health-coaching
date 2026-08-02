@@ -13,7 +13,7 @@ import {
 } from "@/lib/analytics";
 import { runTraffic, todayISO } from "@/lib/program";
 import { isRunLog, type Checkin, type HealthRow, type Readiness } from "@/lib/types";
-import type { CycleState } from "@/lib/cycle";
+import { cycleChip, type CycleState } from "@/lib/cycle";
 import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
 import { Button, Dots, inputClass } from "@/components/ui";
 import BriefWhy, { type BriefInputs } from "@/components/today/BriefWhy";
@@ -55,6 +55,11 @@ const READINESS_META: Record<
     dot: "bg-stop",
   },
 };
+
+// The block now asks how she *feels*, not for a traffic-light label. The stored
+// value is still green/yellow/red (the coach reasons in those terms); only the
+// button words change.
+const FEEL_LABEL: Record<Readiness, string> = { green: "Good", yellow: "Okay", red: "Low" };
 
 function PendingRunCard({ run }: { run: PendingRun }) {
   const { refreshLogs } = useApp();
@@ -129,9 +134,9 @@ export default function TodayView() {
   const dayIdx = (now.getDay() + 6) % 7;
   const isSaturday = dayIdx === 5; // Saturday defaults to recovery unless she chooses otherwise
 
-  // No named "next session" on Today — the day leads with the cycle dose (where
-  // she is against her targets), not a workout the app says is due. The header
-  // just names the block she's in; the coach brief carries the nuanced call.
+  // No named "next session" on Today — the day leads with how she's arriving
+  // (feel + a quiet cycle/sleep/HRV factor row), then the weekly mix, not a
+  // workout the app says is due. The coach brief carries the nuanced call.
   const phaseFocus = activePhase?.focus?.split(/[;,]/)[0]?.trim().toUpperCase() ?? "";
 
   // Readiness
@@ -188,8 +193,6 @@ export default function TodayView() {
       .then((r) => setCycle(r.state))
       .catch(() => {});
   }, []);
-  const showCycle = cycle && (cycle.lastStart || cycle.bleedingToday);
-
   // Voice: read the morning brief aloud (built-in speech)
   const [speaking, setSpeaking] = useState(false);
   useEffect(() => primeVoices(), []);
@@ -256,32 +259,10 @@ export default function TodayView() {
         )}
       </div>
 
-      {/* Cycle dose — the anchor: where you are against your targets */}
-      <div className="mt-5">
-        <WeekBalance />
-      </div>
-
-      {/* Resume an unfinished session (survives an app reload) */}
-      <ResumeSessionCard />
-
-      {/* Readiness — coach read (data-informed) + your call */}
-      <div className="mt-6">
-        {!checkin && suggestion && (
-          <div className={`border p-3 mb-3 ${READINESS_META[suggestion.level].cls}`}>
-            <div className="label !text-[9px] !text-current">Coach read · this morning</div>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className={`w-2 h-2 rounded-full shrink-0 ${READINESS_META[suggestion.level].dot}`} />
-              <span className="display text-[16px] text-ink">
-                Leaning {READINESS_META[suggestion.level].label}
-              </span>
-            </div>
-            <div className="text-[12px] text-muted mt-1 leading-snug">
-              {suggestion.reasons.join(" · ")}. {READINESS_META[suggestion.level].hint}.
-            </div>
-          </div>
-        )}
+      {/* Arriving — how you feel leads; cycle is one quiet factor beside sleep/HRV/RHR */}
+      <div className="mt-5 border border-line bg-surface p-4">
+        <div className="label mb-2.5">How are you arriving?</div>
         <div className="flex items-center gap-2">
-          <span className="label shrink-0 mr-1">Arriving</span>
           {(Object.keys(READINESS_META) as Readiness[]).map((r) => {
             const meta = READINESS_META[r];
             const active = checkin?.readiness === r;
@@ -290,26 +271,69 @@ export default function TodayView() {
               <button
                 key={r}
                 onClick={() => submitReadiness(r)}
-                className={`display text-[12px] tracking-[0.1em] px-3 py-1.5 border cursor-pointer transition-colors ${
+                className={`display text-[14px] tracking-[0.1em] px-4 py-2.5 border flex-1 text-center cursor-pointer transition-colors ${
                   active ? meta.active : suggested ? meta.suggest : `${meta.cls} hover:bg-surface-2`
                 }`}
               >
-                {meta.label}
+                {FEEL_LABEL[r]}
               </button>
             );
           })}
-          {checkin && (
-            <span className="text-[11px] text-faint ml-1">
-              {READINESS_META[checkin.readiness].hint}
-            </span>
-          )}
         </div>
-        {!checkin && suggestion && (
-          <div className="text-[10px] text-faint mt-1.5">
-            Coach suggests {READINESS_META[suggestion.level].label} — tap to confirm or overrule.
+        {!checkin && suggestion ? (
+          <div className="text-[13px] text-muted leading-snug mt-3.5">
+            Coach&apos;s leaning {FEEL_LABEL[suggestion.level]} — {suggestion.reasons.join(", ")}. Tap
+            to confirm or overrule.
           </div>
-        )}
+        ) : checkin ? (
+          <div className="text-[13px] text-muted leading-snug mt-3.5">
+            {READINESS_META[checkin.readiness].hint.charAt(0).toUpperCase() +
+              READINESS_META[checkin.readiness].hint.slice(1)}
+            .
+          </div>
+        ) : null}
+        {(() => {
+          const chip = cycle ? cycleChip(cycle) : null;
+          const hasHealth =
+            latestHealth &&
+            (latestHealth.sleep_hours != null ||
+              latestHealth.hrv != null ||
+              latestHealth.resting_hr != null);
+          if (!chip && !hasHealth) return null;
+          return (
+            <div className="flex gap-3.5 flex-wrap mt-3.5 pt-3 border-t border-line text-[11px] text-faint">
+              {chip && (
+                <span>
+                  cycle <span className="num text-muted">{chip}</span>
+                </span>
+              )}
+              {latestHealth?.sleep_hours != null && (
+                <span>
+                  sleep <span className="num text-muted">{latestHealth.sleep_hours.toFixed(1)}</span>h
+                </span>
+              )}
+              {latestHealth?.hrv != null && (
+                <span>
+                  HRV <span className="num text-muted">{Math.round(latestHealth.hrv)}</span>
+                </span>
+              )}
+              {latestHealth?.resting_hr != null && (
+                <span>
+                  RHR <span className="num text-muted">{Math.round(latestHealth.resting_hr)}</span>
+                </span>
+              )}
+            </div>
+          );
+        })()}
       </div>
+
+      {/* Weekly training mix — the shape she trains in */}
+      <div className="mt-4">
+        <WeekBalance />
+      </div>
+
+      {/* Resume an unfinished session (survives an app reload) */}
+      <ResumeSessionCard />
 
       {/* Proactive signals */}
       {signals.length > 0 && (
@@ -423,49 +447,6 @@ export default function TodayView() {
           )}
         </div>
       </div>
-
-      {/* Apple Health + cycle strip */}
-      {(() => {
-        const hasHealth =
-          latestHealth &&
-          (latestHealth.sleep_hours != null ||
-            latestHealth.steps != null ||
-            latestHealth.hrv != null ||
-            latestHealth.resting_hr != null);
-        if (!hasHealth && !showCycle) return null;
-        return (
-          <div className="flex items-center gap-4 mt-3 border border-line px-3.5 py-2.5">
-            <span className="label !text-[9px] shrink-0">Health</span>
-            <div className="flex gap-4 flex-wrap items-center">
-              {latestHealth?.sleep_hours != null && (
-                <span className="text-[12px] text-muted">
-                  <span className="num text-ink">{latestHealth.sleep_hours}</span>h sleep
-                </span>
-              )}
-              {latestHealth?.steps != null && (
-                <span className="text-[12px] text-muted">
-                  <span className="num text-ink">{latestHealth.steps.toLocaleString()}</span> steps
-                </span>
-              )}
-              {latestHealth?.hrv != null && (
-                <span className="text-[12px] text-muted">
-                  HRV <span className="num text-ink">{latestHealth.hrv}</span>
-                </span>
-              )}
-              {latestHealth?.resting_hr != null && (
-                <span className="text-[12px] text-muted">
-                  RHR <span className="num text-ink">{latestHealth.resting_hr}</span>
-                </span>
-              )}
-              {showCycle && cycle && (
-                <span className="display text-[11px] tracking-[0.06em] text-accent-dim border border-accent-dim/40 px-1.5 py-0.5">
-                  {cycle.label}
-                </span>
-              )}
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Consistency — showing up made visible (momentum, never guilt) */}
       <div className="border border-line bg-surface p-3.5 mt-4">

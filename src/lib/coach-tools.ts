@@ -314,7 +314,7 @@ const getProgram = betaTool({
         `Weekly targets — these are RATES PER WEEK, not a count for any fixed window. Scale them yourself to whatever span you're judging:`,
         `  • ${t.strength} strength sessions/week (the rotation, plus G1 as the 4th when recovery allows)`,
         `  • ${t.zone2Min}–${t.zone2Max} easy aerobic (Zone 2) sessions/week`,
-        `  • ${t.run} run progression/week when the right ankle is Green`,
+        `  • ${t.run} run progression/week`,
         `  • ${t.recovery} complete recovery day/week — one, not two; more than one full rest day reads as under-training, not extra recovery. PT/joint-prep throughout`,
         ``,
         `Judging pace: count what she ACTUALLY logged over the span you care about (query_logs) and compare to the weekly rate scaled to that span. Example: ${t.strength}/week is about ${Math.round((t.strength * 10) / 7)} across 10 days, so 6 strength sessions in 10 days is on pace — NOT "over." Never read a target as a raw count against a mismatched window.`,

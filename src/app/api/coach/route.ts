@@ -5,6 +5,7 @@ import { buildCoachCore } from "@/lib/coach-context";
 import { COACH_TOOLS, toolStatusLabel } from "@/lib/coach-tools";
 import { supabase } from "@/lib/supabase";
 import { SYSTEM_PROMPT } from "@/lib/system-prompt";
+import { lintVoice, rewriteInVoice } from "@/lib/voice";
 import type { ChatMessage } from "@/lib/types";
 
 const client = new Anthropic();
@@ -96,6 +97,10 @@ export async function POST(req: NextRequest) {
       stream: true,
     });
 
+    // Raw model draft, buffered (not streamed to her). The gated version is what
+    // she sees and what we persist — so nothing in the un-gated voice ever reaches
+    // her, and "why did it say that" reads the same text she read.
+    let rawDraft = "";
     let assistantText = "";
     const persistAssistant = async () => {
       if (!assistantText.trim()) return;
@@ -125,8 +130,8 @@ export async function POST(req: NextRequest) {
                 event.type === "content_block_delta" &&
                 event.delta.type === "text_delta"
               ) {
-                assistantText += event.delta.text;
-                send(event.delta.text);
+                // Buffer, don't stream: the coach's raw voice must not reach her.
+                rawDraft += event.delta.text;
               }
             }
 
@@ -141,16 +146,32 @@ export async function POST(req: NextRequest) {
               }
             }
           }
+
+          // Model's done. Gate the whole draft into coach voice, then stream the
+          // finished reply. The brief status frame keeps the short wait honest.
+          send(frame({ type: "status", text: "Writing…" }));
+          assistantText = await rewriteInVoice(rawDraft);
           send(frame({ type: "status", text: "" }));
+          for (const chunk of assistantText.match(/\S+\s*/g) ?? [assistantText]) {
+            send(chunk);
+          }
           await persistAssistant();
           controller.close();
         } catch (e) {
-          await persistAssistant(); // keep whatever streamed before the failure
+          // Failed before/at the gate: show the deterministically-cleaned draft so
+          // she isn't left with a spinner, and persist that.
+          if (!assistantText && rawDraft) {
+            assistantText = lintVoice(rawDraft).text;
+            send(assistantText);
+          }
+          await persistAssistant();
           controller.error(e);
         }
       },
       async cancel() {
-        // Client hit Stop or navigated away: stop paying for tokens, keep the partial
+        // Client hit Stop or navigated away: stop paying for tokens, keep the
+        // partial (gated if we reached it, otherwise the cleaned raw draft).
+        if (!assistantText && rawDraft) assistantText = lintVoice(rawDraft).text;
         await persistAssistant();
       },
     });

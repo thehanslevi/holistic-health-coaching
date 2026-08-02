@@ -499,3 +499,31 @@ export function computeCycle(logs: LogRow[], now: Date = new Date()): TrainingCy
     lastWasLower: !!lastStrength && LOWER_KEYS.has(lastStrength),
   };
 }
+
+// The single highest-leverage move toward her goals, given this week's mix.
+// Framed as opportunity, never obligation — and NOT ankle-gated (that gate was
+// removed by her choice; the run judgment is hers). Plain language, no calorie
+// or restriction framing. Returns null when the week is already well-shaped.
+export type NextMove = { tag: string; text: string } | null;
+
+export function nextMove(c: TrainingCycle): NextMove {
+  // Aerobic base + run durability are the stalled goals — a missing run is the
+  // biggest lever, so it leads.
+  if (c.runsDone === 0) {
+    return {
+      tag: "run",
+      text: "No run yet this week. An easy 2 is the one thing that grows your aerobic base and run durability.",
+    };
+  }
+  if (c.strengthDone < c.strengthTarget) {
+    const gap = c.strengthTarget - c.strengthDone;
+    return {
+      tag: "lift",
+      text: `${gap} more strength session${gap === 1 ? "" : "s"} rounds out your week — ${c.nextStrength} is next in the rotation.`,
+    };
+  }
+  if (c.aerobicDone < c.zone2Min) {
+    return { tag: "easy", text: "Room for one more easy aerobic day — bike, swim, or a walk." };
+  }
+  return null; // week's in good shape; say nothing rather than manufacture a nudge
+}
