@@ -25,8 +25,8 @@ export function profileBlock(entries: ProfileEntry[]): string {
     "HANNAH'S CURRENT STATUS — she maintains this herself. It is CURRENT and AUTHORITATIVE. It OVERRIDES anything older in your background profile; where they conflict, THIS wins. Do not apply an old constraint she has marked resolved.",
   ];
   if (active.length) {
-    lines.push("Current:");
-    for (const e of active) lines.push(`- [${label(e.kind)}] ${e.text}`);
+    lines.push("Current (id in brackets — call resolve_fact with it to retire one she clearly says no longer applies):");
+    for (const e of active) lines.push(`- [${e.id}] [${label(e.kind)}] ${e.text}`);
   }
   if (resolved.length) {
     lines.push("Resolved / no longer a factor (do NOT program around these):");
@@ -35,7 +35,7 @@ export function profileBlock(entries: ProfileEntry[]): string {
   return lines.join("\n") + "\n";
 }
 
-const WINDOW_DAYS = 14;
+const WINDOW_DAYS = 21;
 const MAX_CONTEXT_CHARS = 9000;
 
 // Dates resolve in the athlete's timezone, not the server's — see lib/day.ts.
@@ -65,7 +65,7 @@ export async function buildCoachCore(): Promise<string> {
   const monday = mondayOf();
   const today = todayISO();
 
-  const [weekRes, checkinRes, healthRes, hrvRes, recoveryRes, cycleRes, profileRes, decisions, lastRunRes] =
+  const [weekRes, checkinRes, healthRes, hrvRes, recoveryRes, cycleRes, profileRes, decisions, lastRunRes, recentRes] =
     await Promise.all([
       db.from("hrl_logs").select("logged_at, kind, session_key").gte("logged_at", monday),
       db.from("hrl_checkins").select("*").order("date", { ascending: false }).limit(1),
@@ -89,6 +89,12 @@ export async function buildCoachCore(): Promise<string> {
         .eq("kind", "run")
         .order("logged_at", { ascending: false })
         .limit(1),
+      db
+        .from("hrl_logs")
+        .select("logged_at, kind, session_key, data")
+        .gte("logged_at", daysAgoISO(21))
+        .order("logged_at", { ascending: false })
+        .limit(50),
     ]);
 
   const week = (weekRes.data ?? []) as { logged_at: string; kind: string; session_key: string | null }[];
@@ -195,6 +201,37 @@ export async function buildCoachCore(): Promise<string> {
     );
   } else {
     lines.push("No runs logged.");
+  }
+
+  // A wider always-on skeleton of what she's actually done lately, so the coach
+  // isn't reasoning off "this week so far" alone early in the week. Dates + what,
+  // no weights or trends — it still goes to the tools for the detail.
+  const recent = (recentRes.data ?? []) as {
+    logged_at: string;
+    kind: string;
+    session_key: string | null;
+    data: Record<string, unknown> | null;
+  }[];
+  if (recent.length) {
+    const md = (iso: string) => `${iso.slice(5, 7)}/${iso.slice(8, 10)}`;
+    const label = (r: (typeof recent)[number]): string => {
+      if (r.kind === "session") return r.session_key || "session";
+      if (r.kind === "run") {
+        const d = r.data?.run_dist;
+        return d ? `run ${d}mi` : "run";
+      }
+      if (r.kind === "xtrain") {
+        const m = r.data?.modality;
+        return m ? String(m) : "xtrain";
+      }
+      return r.kind;
+    };
+    lines.push(
+      "",
+      `RECENT TRAINING (last 21 days, newest first) — a skeleton, not the detail. For weights, reps, and how it went, use query_logs / get_run_history / get_exercise_progression: ${recent
+        .map((r) => `${md(r.logged_at)} ${label(r)}`)
+        .join(" · ")}`,
+    );
   }
 
   const profile = profileBlock((profileRes.data ?? []) as ProfileEntry[]);

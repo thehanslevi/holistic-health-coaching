@@ -654,10 +654,72 @@ const getDecisionHistory = betaTool({
   },
 });
 
+const rememberFact = betaTool({
+  name: "remember_fact",
+  description:
+    "Persist a DURABLE fact she tells you, so it carries across sessions and shows up in her status panel where she can edit or retire it. Use this only for things that stay true for weeks or months and that you could not recompute from her data: a standing preference, a life or schedule constraint (travel, an injury flaring or clearing, a gym/equipment change), or a goal she states. NEVER remember a number, weight, rep scheme, HRV or sleep figure, or any program detail — those live in her logs, health, and program, and you read them live every session. NEVER remember something already in her profile. One fact per call, in plain language.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      fact: {
+        type: "string",
+        description:
+          "The durable fact, plainly stated. e.g. 'Traveling and without a gym the week of Aug 10.' or 'Prefers to train in the mornings on weekdays.'",
+      },
+      kind: {
+        type: "string",
+        enum: ["priority", "constraint", "note"],
+        description:
+          "priority = a goal she's working toward; constraint = a limitation to weigh in programming; note = general durable context. Default note.",
+      },
+    },
+    required: ["fact"],
+    additionalProperties: false,
+  },
+  run: async ({ fact, kind }) => {
+    const db = supabase();
+    const k = kind && ["priority", "constraint", "note"].includes(kind) ? kind : "note";
+    const { data, error } = await db
+      .from("hrl_profile")
+      .insert({ kind: k, text: fact })
+      .select("id")
+      .single();
+    if (error) return `Could not save that: ${error.message}`;
+    return `Saved to her profile (id ${data.id}). It's in her status panel now — she can edit or retire it.`;
+  },
+});
+
+const resolveFact = betaTool({
+  name: "resolve_fact",
+  description:
+    "Retire a profile item when she clearly tells you it is no longer a factor — e.g. she says a constraint has passed, or an injury has been fine for weeks. This moves it to 'resolved' so you stop programming around it; it is not deleted and she can reactivate it. Only retire on a clear statement from her, never on one good day. Reference the item by the id shown in her current status.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "The profile item's id, as shown in her current status." },
+    },
+    required: ["id"],
+    additionalProperties: false,
+  },
+  run: async ({ id }) => {
+    const db = supabase();
+    const { data, error } = await db
+      .from("hrl_profile")
+      .update({ status: "resolved", updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("status", "active")
+      .select("text")
+      .maybeSingle();
+    if (error) return `Could not retire that: ${error.message}`;
+    if (!data) return `No active profile item with id "${id}". Check her current status.`;
+    return `Retired: "${data.text}". Marked resolved in her status panel.`;
+  },
+});
+
 // Order is fixed and module-level: tools render ahead of the system prompt in
 // the cache prefix, so any reshuffle here invalidates the cached prompt.
 const READ_TOOLS = [queryLogs, getExerciseProgression, getRunHistory, getHealthSeries, getProgram];
-const WRITE_TOOLS = [editProgram, setExerciseTarget];
+const WRITE_TOOLS = [editProgram, setExerciseTarget, rememberFact, resolveFact];
 const JOURNAL_TOOLS = [recordDecision, closeDecision, getDecisionHistory];
 
 // Server-side web search (Anthropic-hosted; executes on their infra, so no run
@@ -722,6 +784,10 @@ export function toolStatusLabel(name: string, input: unknown): string {
       return "Closing the loop on an earlier call…";
     case "get_decision_history":
       return "Checking what we've tried before…";
+    case "remember_fact":
+      return "Noting that to remember…";
+    case "resolve_fact":
+      return "Updating your profile…";
     default:
       return "Looking something up…";
   }
