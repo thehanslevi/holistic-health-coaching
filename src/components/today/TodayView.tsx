@@ -13,13 +13,12 @@ import {
 } from "@/lib/analytics";
 import { runTraffic, todayISO } from "@/lib/program";
 import { isRunLog, type Checkin, type HealthRow, type Readiness } from "@/lib/types";
-import { cycleChip, type CycleState } from "@/lib/cycle";
+import { cycleChip, cyclePractical, type CycleState } from "@/lib/cycle";
 import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
 import { Button, Dots, inputClass } from "@/components/ui";
 import BriefWhy, { type BriefInputs } from "@/components/today/BriefWhy";
 import { useApp } from "@/components/AppShell";
 import CalendarOverlay from "@/components/today/CalendarOverlay";
-import RecoveryCard from "@/components/today/RecoveryCard";
 import PushOptIn from "@/components/today/PushOptIn";
 import ResumeSessionCard from "@/components/today/ResumeSessionCard";
 import WeekBalance from "@/components/train/WeekBalance";
@@ -61,17 +60,12 @@ const READINESS_META: Record<
 // button words change.
 const FEEL_LABEL: Record<Readiness, string> = { green: "Good", yellow: "Okay", red: "Low" };
 
-// Human "6h ago" for a health-sync timestamp, so stale data is obvious.
-function relTime(iso?: string | null): string {
-  if (!iso) return "never";
-  const ms = Date.now() - Date.parse(iso);
-  if (Number.isNaN(ms)) return "unknown";
-  const m = Math.round(ms / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
+// "Jul 31" for a stale health row's date — terse, no prose.
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function shortDate(iso: string): string {
+  const d = new Date(iso + "T12:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
 function PendingRunCard({ run }: { run: PendingRun }) {
@@ -145,7 +139,6 @@ export default function TodayView() {
   const now = new Date();
   const today = todayISO();
   const dayIdx = (now.getDay() + 6) % 7;
-  const isSaturday = dayIdx === 5; // Saturday defaults to recovery unless she chooses otherwise
 
   // No named "next session" on Today — the day leads with how she's arriving
   // (feel + a quiet cycle/sleep/HRV factor row), then the weekly mix, not a
@@ -254,7 +247,6 @@ export default function TodayView() {
   }, [cycle]);
   const suggestion = useMemo(() => suggestReadiness(health), [health]);
   const pending = useMemo(() => pendingRuns(logs), [logs]);
-  const fuelingDay = !isSaturday; // most days carry a session; Saturday defaults to recovery
 
   const lightColor = (l: "green" | "yellow" | "red") =>
     l === "green" ? "text-go" : l === "yellow" ? "text-hold" : "text-stop";
@@ -287,9 +279,9 @@ export default function TodayView() {
         )}
       </div>
 
-      {/* Arriving — how you feel leads; cycle is one quiet factor beside sleep/HRV/RHR */}
+      {/* Today — how you feel leads; cycle is one quiet factor beside sleep/HRV/RHR */}
       <div className="mt-5 border border-line bg-surface p-4">
-        <div className="label mb-2.5">How are you arriving?</div>
+        <div className="label mb-2.5">Today</div>
         <div className="flex items-center gap-2">
           {(Object.keys(READINESS_META) as Readiness[]).map((r) => {
             const meta = READINESS_META[r];
@@ -310,8 +302,7 @@ export default function TodayView() {
         </div>
         {!checkin && suggestion ? (
           <div className="text-[13px] text-muted leading-snug mt-3.5">
-            Coach&apos;s leaning {FEEL_LABEL[suggestion.level]}: {suggestion.reasons.join(", ")}. Tap
-            to confirm or overrule.
+            Coach&apos;s leaning {FEEL_LABEL[suggestion.level]}: {suggestion.reasons.join(", ")}.
           </div>
         ) : checkin ? (
           <div className="text-[13px] text-muted leading-snug mt-3.5">
@@ -363,12 +354,16 @@ export default function TodayView() {
                   {healthRefreshing ? "SYNCING…" : "⟳ SYNC"}
                 </button>
               </div>
-              {hasHealth && (
-                <div className="text-[10px] text-faint mt-1.5">
-                  {healthIsToday
-                    ? `Today still settling · synced ${relTime(latestHealth?.updated_at)}`
-                    : `Not synced today — showing ${latestHealth?.date} (${relTime(latestHealth?.updated_at)}). Tap Sync.`}
-                </div>
+              {/* No freshness prose. Numbers just show; when the day hasn't synced
+                  yet, a terse "from {date}" marks that they're older. */}
+              {hasHealth && !healthIsToday && latestHealth?.date && (
+                <div className="text-[10px] text-hold mt-1.5">from {shortDate(latestHealth.date)}</div>
+              )}
+              {/* One plain line of what the cycle phase means today (chip above
+                  stays uniform). Skipped on a bleeding day — the period note in
+                  the signal strip already covers that. */}
+              {cycle && cyclePractical(cycle) && (
+                <div className="text-[11px] text-faint mt-2 leading-snug">{cyclePractical(cycle)}</div>
               )}
             </div>
           );
@@ -532,15 +527,7 @@ export default function TodayView() {
             </div>
           ))}
         </div>
-        {consistency.streak >= 3 && (
-          <div className="text-[11px] text-accent-dim mt-2.5">
-            {consistency.streak} days in a row. Keep it rolling.
-          </div>
-        )}
       </div>
-
-      {/* Daily recovery check */}
-      <RecoveryCard fuelingDay={fuelingDay} />
 
       {/* CTA — you pick the session; nothing is prescribed */}
       <Button size="lg" className="mt-6" onClick={() => setTab("train")}>

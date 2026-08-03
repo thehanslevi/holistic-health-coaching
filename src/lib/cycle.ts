@@ -118,6 +118,26 @@ export function cycleChip(s: CycleState): string | null {
 }
 
 /**
+ * One plain line of what the current phase means for training TODAY — the "so
+ * what" the bare chip can't carry. Shown once under the factor row (chip stays
+ * uniform beside sleep/HRV/RHR), so the phase is factored in without becoming a
+ * headline. Always flagged as an estimate; how she feels overrides it. Returns
+ * null on a bleeding day (the period signal strip already covers that) and when
+ * there's no usable phase.
+ */
+export function cyclePractical(s: CycleState): string | null {
+  if (s.bleedingToday) return null;
+  if (s.phase === "unknown" || s.cycleDay == null) return null;
+  const byPhase: Record<Exclude<CyclePhase, "unknown">, string> = {
+    menstrual: "Early in your cycle. Ease in, train normal if you feel good.",
+    follicular: "Good window to push or go for a PR.",
+    ovulatory: "Strength often peaks. Good day for a hard effort.",
+    luteal: "Fuel a bit more and skip max attempts. You may feel it more.",
+  };
+  return `${byPhase[s.phase]} Estimate; how you feel wins.`;
+}
+
+/**
  * One-line coach-facing cycle summary, textbook follicular/luteal model. Fed to
  * the coach every day there's cycle data so the phase can inform the week's
  * emphasis — but always flagged as an estimate on an irregular cycle, with how

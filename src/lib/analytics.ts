@@ -504,6 +504,117 @@ export function computeCycle(logs: LogRow[], now: Date = new Date()): TrainingCy
   };
 }
 
+// ─── Calendar-week views (for the week pager + history overlay) ────────────────
+//
+// The dose card and history page by Monday–Sunday calendar weeks, so a week's
+// mix reads the same whether it's "this week" or scrolled back to months ago
+// (the rolling-7 window above stays behind the NEXT nudge, which is forward-
+// looking and only shown for the current week).
+
+export type WeekMix = {
+  weekStart: string; // Monday ISO
+  label: string; // "This week" | "Jul 20–26"
+  isCurrent: boolean;
+  strengthDone: number;
+  zone2Done: number;
+  runsDone: number;
+  aerobicDone: number;
+  restDays: number;
+  hits: boolean[]; // Mon…Sun, true where anything was logged
+  activeDays: number;
+};
+
+/** Monday (ISO) of the week `offset` weeks from the week containing `now`. */
+export function weekMonday(offset = 0, now: Date = new Date()): string {
+  const d = new Date(now);
+  const idx = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - idx + offset * 7);
+  return isoLocal(d);
+}
+
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Jul 20–26" / "Jul 27–Aug 2"; the current week reads "This week". */
+export function weekLabel(weekStart: string, now: Date = new Date()): string {
+  if (weekStart === weekMonday(0, now)) return "This week";
+  const start = new Date(weekStart + "T12:00:00");
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  const left = `${MONTH_ABBR[start.getMonth()]} ${start.getDate()}`;
+  const right =
+    start.getMonth() === end.getMonth()
+      ? `${end.getDate()}`
+      : `${MONTH_ABBR[end.getMonth()]} ${end.getDate()}`;
+  return `${left}–${right}`;
+}
+
+/** Strength/aerobic/rest mix for one Monday–Sunday week. */
+export function weekMix(logs: LogRow[], weekStart: string, now: Date = new Date()): WeekMix {
+  const days: string[] = [];
+  const start = new Date(weekStart + "T12:00:00");
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    days.push(isoLocal(d));
+  }
+  const todayIso = isoLocal(now);
+  const inWeek = logs.filter((l) => days.includes(l.logged_at));
+
+  let strengthDone = 0;
+  let zone2Done = 0;
+  let runsDone = 0;
+  for (const row of inWeek) {
+    if (isSessionLog(row)) {
+      if (STRENGTH_KEYS.has(row.data.sessionKey as SessionKey)) strengthDone += 1;
+    } else if (isRunLog(row)) {
+      runsDone += 1;
+    } else if (isXtrainLog(row) && AEROBIC_RE.test(row.data.modality)) {
+      zone2Done += 1;
+    }
+  }
+
+  const active = new Set(inWeek.map((l) => l.logged_at));
+  const hits = days.map((d) => active.has(d));
+  // Rest = days already finished this week with nothing logged. Today is still in
+  // progress, so it doesn't count as a rest day yet (a past week counts all 7).
+  let restDays = 0;
+  for (const d of days) {
+    if (d >= todayIso) break;
+    if (!active.has(d)) restDays += 1;
+  }
+
+  return {
+    weekStart,
+    label: weekLabel(weekStart, now),
+    isCurrent: weekStart === weekMonday(0, now),
+    strengthDone,
+    zone2Done,
+    runsDone,
+    aerobicDone: zone2Done + runsDone,
+    restDays,
+    hits,
+    activeDays: active.size,
+  };
+}
+
+/** Every week from the earliest log to now, newest first — for the history list. */
+export function listWeekSummaries(logs: LogRow[], now: Date = new Date()): WeekMix[] {
+  const current = weekMonday(0, now);
+  if (logs.length === 0) return [weekMix(logs, current, now)];
+  const earliest = logs.reduce((m, l) => (l.logged_at < m ? l.logged_at : m), logs[0].logged_at);
+  const earliestMon = weekOf(earliest);
+  const out: WeekMix[] = [];
+  let cursor = current;
+  // Guard against a bad date sending this unbounded.
+  for (let i = 0; i < 520 && cursor >= earliestMon; i++) {
+    out.push(weekMix(logs, cursor, now));
+    const d = new Date(cursor + "T12:00:00");
+    d.setDate(d.getDate() - 7);
+    cursor = isoLocal(d);
+  }
+  return out;
+}
+
 // The single highest-leverage move toward her goals, given this week's mix.
 // Framed as opportunity, never obligation — and NOT ankle-gated (that gate was
 // removed by her choice; the run judgment is hers). Plain language, no calorie

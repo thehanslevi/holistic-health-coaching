@@ -303,6 +303,13 @@ export default function SessionLogger({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Recovery inputs relocated here from the old Today card — captured at their
+  // natural moment (right after training) and written to hrl_recovery so the
+  // coach still sees them. Fuel-beforehand is already collected on the exercise
+  // screen (log.preFuel); these two are the after/yesterday half.
+  const [postFuel, setPostFuel] = useState<FuelStatus | null>(null);
+  const [proteinFloor, setProteinFloor] = useState<"yes" | "close" | "no" | "unknown" | null>(null);
+
   // Today's readiness → autoregulation note in the intro.
   const [readiness, setReadiness] = useState<Readiness | null>(null);
   useEffect(() => {
@@ -440,6 +447,18 @@ export default function SessionLogger({
         }),
       });
       addLog(row);
+      // Relocated recovery inputs → hrl_recovery for the session date, keeping the
+      // coach's recovery line fed. Best-effort; a failure never blocks the log.
+      if (postFuel || proteinFloor) {
+        api("/api/recovery", {
+          method: "POST",
+          body: JSON.stringify({
+            date: payload.date,
+            ...(postFuel ? { post_training_fuel: postFuel } : {}),
+            ...(proteinFloor ? { protein_floor: proteinFloor } : {}),
+          }),
+        }).catch(() => {});
+      }
       clearSessionDraft();
       setStage({ name: "saved", row });
     } catch (e) {
@@ -955,6 +974,34 @@ export default function SessionLogger({
             className={`${inputClass} resize-y`}
           />
         </Field>
+
+        {/* Recovery — moved off the Today screen to its natural moment. Optional;
+            what you set here goes to your coach. */}
+        <div className="mt-4 border border-line p-3.5">
+          <div className="flex items-center justify-between mb-2.5">
+            <SectionLabel>Recovery</SectionLabel>
+            <span className="label !text-[8px] !text-accent-dim">Coach reads this</span>
+          </div>
+          <div className="label !text-[9px] mb-2">Food after this session</div>
+          <ChipGroup
+            cols={3}
+            options={FUEL_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            value={postFuel}
+            onChange={(v) => setPostFuel((v as FuelStatus) ?? null)}
+          />
+          <div className="label !text-[9px] mt-3 mb-2">Protein floor yesterday</div>
+          <ChipGroup
+            cols={4}
+            options={[
+              { value: "yes", label: "Yes" },
+              { value: "close", label: "Close" },
+              { value: "no", label: "No" },
+              { value: "unknown", label: "Not sure" },
+            ]}
+            value={proteinFloor}
+            onChange={(v) => setProteinFloor((v as typeof proteinFloor) ?? null)}
+          />
+        </div>
 
         {error && <div className="text-xs text-stop mt-3">{error}</div>}
         <Button size="lg" className="mt-5" onClick={handleSave} disabled={saving}>
