@@ -185,7 +185,6 @@ export default function TodayView() {
   };
 
   // Apple Health
-  const [healthRefreshing, setHealthRefreshing] = useState(false);
   const loadHealth = useCallback(
     () => api<HealthRow[]>("/api/health").then(setHealth).catch(() => {}),
     [],
@@ -193,12 +192,27 @@ export default function TodayView() {
   useEffect(() => {
     loadHealth();
   }, [loadHealth]);
+  // The app can't reach into Apple Health directly — the phone's Health Auto
+  // Export pushes on a schedule. So this button re-checks for whatever's already
+  // been pushed and reports plainly what it found, instead of silently
+  // re-fetching identical numbers (which read as "it did nothing").
+  type SyncState = "idle" | "syncing" | "current" | "updated" | "failed";
+  const [syncState, setSyncState] = useState<SyncState>("idle");
   const refreshHealth = async () => {
-    setHealthRefreshing(true);
+    if (syncState === "syncing") return;
+    const prevStamp = health[0]?.updated_at ?? null;
+    const prevDate = health[0]?.date ?? null;
+    setSyncState("syncing");
     try {
-      await loadHealth();
+      const rows = await api<HealthRow[]>("/api/health");
+      setHealth(rows);
+      const newest = rows[0] ?? null;
+      const changed = !!newest && (newest.updated_at !== prevStamp || newest.date !== prevDate);
+      setSyncState(changed ? "updated" : "current");
+    } catch {
+      setSyncState("failed");
     } finally {
-      setHealthRefreshing(false);
+      window.setTimeout(() => setSyncState("idle"), 2600);
     }
   };
   const latestHealth = health[0] ?? null;
@@ -347,11 +361,25 @@ export default function TodayView() {
                 </div>
                 <button
                   onClick={refreshHealth}
-                  disabled={healthRefreshing}
-                  className="label !text-[9px] shrink-0 !text-faint hover:!text-accent transition-colors cursor-pointer disabled:opacity-50"
-                  aria-label="Sync health data"
+                  disabled={syncState === "syncing"}
+                  className={`label !text-[9px] shrink-0 transition-colors cursor-pointer disabled:opacity-70 ${
+                    syncState === "failed"
+                      ? "!text-stop"
+                      : syncState === "updated" || syncState === "current"
+                        ? "!text-accent-dim"
+                        : "!text-faint hover:!text-accent"
+                  }`}
+                  aria-label="Check for new health data from your phone"
                 >
-                  {healthRefreshing ? "SYNCING…" : "⟳ SYNC"}
+                  {syncState === "syncing"
+                    ? "CHECKING…"
+                    : syncState === "updated"
+                      ? "✓ UPDATED"
+                      : syncState === "current"
+                        ? "✓ UP TO DATE"
+                        : syncState === "failed"
+                          ? "✕ COULDN'T REACH"
+                          : "⟳ SYNC"}
                 </button>
               </div>
               {/* No freshness prose. Numbers just show; when the day hasn't synced
