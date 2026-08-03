@@ -184,37 +184,28 @@ export default function TodayView() {
     }
   };
 
-  // Apple Health
+  // Apple Health. There is no manual "sync": a PWA can't read Apple Health, and
+  // the phone's Health Auto Export pushes on its own schedule — a button could
+  // only ever re-read what's already arrived, which is misleading. Instead we
+  // re-read on mount AND every time the app comes back to the foreground, which
+  // is exactly when a fresh HAE push may have landed. So returning to the app
+  // surfaces new numbers on its own, no button, no false promise.
   const loadHealth = useCallback(
     () => api<HealthRow[]>("/api/health").then(setHealth).catch(() => {}),
     [],
   );
   useEffect(() => {
     loadHealth();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadHealth();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", loadHealth);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", loadHealth);
+    };
   }, [loadHealth]);
-  // The app can't reach into Apple Health directly — the phone's Health Auto
-  // Export pushes on a schedule. So this button re-checks for whatever's already
-  // been pushed and reports plainly what it found, instead of silently
-  // re-fetching identical numbers (which read as "it did nothing").
-  type SyncState = "idle" | "syncing" | "current" | "updated" | "failed";
-  const [syncState, setSyncState] = useState<SyncState>("idle");
-  const refreshHealth = async () => {
-    if (syncState === "syncing") return;
-    const prevStamp = health[0]?.updated_at ?? null;
-    const prevDate = health[0]?.date ?? null;
-    setSyncState("syncing");
-    try {
-      const rows = await api<HealthRow[]>("/api/health");
-      setHealth(rows);
-      const newest = rows[0] ?? null;
-      const changed = !!newest && (newest.updated_at !== prevStamp || newest.date !== prevDate);
-      setSyncState(changed ? "updated" : "current");
-    } catch {
-      setSyncState("failed");
-    } finally {
-      window.setTimeout(() => setSyncState("idle"), 2600);
-    }
-  };
   const latestHealth = health[0] ?? null;
   // Today's row is provisional: Apple Health re-syncs the current day for hours,
   // and if the watch hasn't synced it may be missing or stale. Track freshness so
@@ -336,51 +327,27 @@ export default function TodayView() {
           const numCls = healthIsToday ? "text-faint" : "text-muted"; // dim provisional
           return (
             <div className="mt-3.5 pt-3 border-t border-line">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex gap-3.5 flex-wrap text-[11px] text-faint">
-                  {chip && (
-                    <span>
-                      cycle <span className="num text-muted">{chip}</span>
-                    </span>
-                  )}
-                  {latestHealth?.sleep_hours != null && (
-                    <span>
-                      sleep <span className={`num ${numCls}`}>{latestHealth.sleep_hours.toFixed(1)}</span>h
-                    </span>
-                  )}
-                  {latestHealth?.hrv != null && (
-                    <span>
-                      HRV <span className={`num ${numCls}`}>{Math.round(latestHealth.hrv)}</span>
-                    </span>
-                  )}
-                  {latestHealth?.resting_hr != null && (
-                    <span>
-                      RHR <span className={`num ${numCls}`}>{Math.round(latestHealth.resting_hr)}</span>
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={refreshHealth}
-                  disabled={syncState === "syncing"}
-                  className={`label !text-[9px] shrink-0 transition-colors cursor-pointer disabled:opacity-70 ${
-                    syncState === "failed"
-                      ? "!text-stop"
-                      : syncState === "updated" || syncState === "current"
-                        ? "!text-accent-dim"
-                        : "!text-faint hover:!text-accent"
-                  }`}
-                  aria-label="Check for new health data from your phone"
-                >
-                  {syncState === "syncing"
-                    ? "CHECKING…"
-                    : syncState === "updated"
-                      ? "✓ UPDATED"
-                      : syncState === "current"
-                        ? "✓ UP TO DATE"
-                        : syncState === "failed"
-                          ? "✕ COULDN'T REACH"
-                          : "⟳ SYNC"}
-                </button>
+              <div className="flex gap-3.5 flex-wrap text-[11px] text-faint">
+                {chip && (
+                  <span>
+                    cycle <span className="num text-muted">{chip}</span>
+                  </span>
+                )}
+                {latestHealth?.sleep_hours != null && (
+                  <span>
+                    sleep <span className={`num ${numCls}`}>{latestHealth.sleep_hours.toFixed(1)}</span>h
+                  </span>
+                )}
+                {latestHealth?.hrv != null && (
+                  <span>
+                    HRV <span className={`num ${numCls}`}>{Math.round(latestHealth.hrv)}</span>
+                  </span>
+                )}
+                {latestHealth?.resting_hr != null && (
+                  <span>
+                    RHR <span className={`num ${numCls}`}>{Math.round(latestHealth.resting_hr)}</span>
+                  </span>
+                )}
               </div>
               {/* No freshness prose. Numbers just show; when the day hasn't synced
                   yet, a terse "from {date}" marks that they're older. */}
