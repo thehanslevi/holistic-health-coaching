@@ -369,7 +369,12 @@ export function computeConsistency(
   today = new Date(),
 ): Consistency {
   const daysWithLog = new Set(logs.map((r) => r.logged_at));
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  // Local date, NOT toISOString(): logs store local calendar dates, and in the
+  // evening UTC is already tomorrow — using toISOString() shifted the whole
+  // streak walk by a day and jumped over unlogged gaps (e.g. read "5 days
+  // strong" at 10pm when only 2 days were logged). Format from local parts.
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const kept = (d: Date) => daysWithLog.has(iso(d)) || d.getDay() === 0; // Sunday = rest
 
   // Current streak: walk back from today (today not-yet-logged doesn't break it).
