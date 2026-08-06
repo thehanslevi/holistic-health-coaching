@@ -12,6 +12,7 @@ import {
   type LogRow,
 } from "@/lib/types";
 import { Button, TrafficLight, type Light } from "@/components/ui";
+import { LogEditor } from "@/components/train/LogEditor";
 import { useApp } from "@/components/AppShell";
 
 const MONTHS = [
@@ -216,6 +217,8 @@ function DayDetail({
   onShiftDay: (dir: 1 | -1) => void;
   onLog: (intent: { type: "session"; sessionKey: string; date: string } | { type: "run"; date: string } | { type: "xtrain"; date: string }) => void;
 }) {
+  const { sessions } = useApp();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const d = parse(date);
   const dayLogs = logs.filter((l) => l.logged_at === date);
   const isToday = date === todayStr;
@@ -306,16 +309,26 @@ function DayDetail({
         <div className="space-y-2 mb-4">
           {dayLogs.map((row) => {
             const h = headline(row);
+            const editing = editingId === row.id;
             return (
-              <div
-                key={row.id}
-                className="border border-line p-3 flex items-center justify-between gap-2"
-              >
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-ink truncate">{h.title}</div>
-                  {h.sub && <div className="text-[11px] text-muted num mt-0.5">{h.sub}</div>}
-                </div>
-                {h.light && <TrafficLight light={h.light} />}
+              <div key={row.id} className="border border-line overflow-hidden">
+                <button
+                  onClick={() => setEditingId(editing ? null : row.id)}
+                  className="w-full p-3 flex items-center justify-between gap-2 cursor-pointer text-left hover:bg-surface-2 transition-colors"
+                  aria-label={`Edit ${h.title}`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-ink truncate">{h.title}</div>
+                    {h.sub && <div className="text-[11px] text-muted num mt-0.5">{h.sub}</div>}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {h.light && <TrafficLight light={h.light} />}
+                    <span className="text-faint text-xs">{editing ? "▴" : "✎"}</span>
+                  </div>
+                </button>
+                {editing && (
+                  <LogEditor row={row} sessions={sessions} onDone={() => setEditingId(null)} />
+                )}
               </div>
             );
           })}
