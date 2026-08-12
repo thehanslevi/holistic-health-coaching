@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiRaw } from "@/lib/client";
 import {
-  computeConsistency,
+  activeDaysInWindow,
   cycleSignal,
   featuredLift,
   pendingRuns,
@@ -241,7 +241,8 @@ export default function TodayView() {
   const hits = useMemo(() => weekDayHits(logs), [logs]);
   const weekCount = hits.filter(Boolean).length;
   const lift = useMemo(() => featuredLift(logs), [logs]);
-  const consistency = useMemo(() => computeConsistency(logs), [logs]);
+  const last7 = useMemo(() => activeDaysInWindow(logs, 7), [logs]);
+  const last30 = useMemo(() => activeDaysInWindow(logs, 30), [logs]);
 
   // Today's only proactive strip item is a gentle bleeding-day note. Everything
   // interpretive (injury watch, adherence, recovery) is the coach's job now — it
@@ -486,41 +487,39 @@ export default function TodayView() {
         </div>
       </div>
 
-      {/* Consistency — showing up made visible (momentum, never guilt) */}
+      {/* Showing up — this week, then rolling momentum (guilt-free: counts that
+          only reflect movement, never a streak to break) */}
       <div className="border border-line bg-surface p-3.5 mt-4">
-        <div className="flex items-baseline justify-between">
-          <span className="label">Consistency</span>
-          {consistency.bestStreak > 0 && (
-            <span className="label !text-[9px]">Best {consistency.bestStreak}</span>
-          )}
-        </div>
-        <div className="flex items-baseline gap-2 mt-1">
-          <span className="stat-num text-[32px] text-accent">{consistency.streak}</span>
-          <span className="display text-[12px] tracking-[0.08em] text-muted">
-            day{consistency.streak === 1 ? "" : "s"} strong
-          </span>
-          <span className="ml-auto display text-[13px] text-ink">
-            {consistency.thisWeek}
-            <span className="text-faint">/6 this wk</span>
-          </span>
-        </div>
-        <div className="flex gap-1.5 mt-3">
+        <span className="label">Momentum</span>
+        <div className="flex gap-1.5 mt-2.5">
           {hits.map((hit, i) => (
             <div key={i} className="flex-1">
               <div
-                className={`h-[5px] ${
-                  hit ? "bg-accent" : i === dayIdx ? "bg-surface-3" : "bg-surface-2"
+                className={`h-2.5 ${
+                  hit ? "bg-accent" : i === dayIdx ? "bg-surface-3 ring-1 ring-inset ring-accent/60" : "bg-surface-2"
                 }`}
               />
               <div
-                className={`label !text-[9px] text-center mt-1 ${
-                  i === dayIdx ? "!text-accent" : ""
-                }`}
+                className={`label !text-[9px] text-center mt-1 ${i === dayIdx ? "!text-accent" : ""}`}
               >
                 {DAY_LETTERS[i]}
               </div>
             </div>
           ))}
+        </div>
+        <div className="grid grid-cols-2 gap-px bg-line border border-line mt-3.5">
+          <div className="bg-surface px-3 py-2.5">
+            <div className="flex items-baseline gap-1.5">
+              <span className="stat-num text-[26px] text-accent">{last7}</span>
+              <span className="display text-[11px] tracking-[0.06em] text-muted">of last 7 days</span>
+            </div>
+          </div>
+          <div className="bg-surface px-3 py-2.5">
+            <div className="flex items-baseline gap-1.5">
+              <span className="stat-num text-[26px] text-accent">{last30}</span>
+              <span className="display text-[11px] tracking-[0.06em] text-muted">of last 30 days</span>
+            </div>
+          </div>
         </div>
       </div>
 

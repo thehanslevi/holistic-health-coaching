@@ -620,6 +620,23 @@ export function listWeekSummaries(logs: LogRow[], now: Date = new Date()): WeekM
   return out;
 }
 
+/**
+ * Distinct days with any log in the last `days` days, inclusive of today. A
+ * guilt-free momentum stat — a rolling count that reflects how much she's been
+ * moving without any streak to "break." Local dates, matching logged_at.
+ */
+export function activeDaysInWindow(logs: LogRow[], days: number, now: Date = new Date()): number {
+  const start = new Date(now);
+  start.setDate(start.getDate() - (days - 1));
+  const startIso = isoLocal(start);
+  const todayIso = isoLocal(now);
+  const seen = new Set<string>();
+  for (const r of logs) {
+    if (r.logged_at >= startIso && r.logged_at <= todayIso) seen.add(r.logged_at);
+  }
+  return seen.size;
+}
+
 // The single highest-leverage move toward her goals, given this week's mix.
 // Framed as opportunity, never obligation — and NOT ankle-gated (that gate was
 // removed by her choice; the run judgment is hers). Plain language, no calorie
