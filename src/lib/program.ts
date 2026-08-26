@@ -7,6 +7,17 @@ import type { Light } from "@/components/ui";
 export const PHASE = "Phase 4: Hybrid Performance — Aerobic Base, Strength Held";
 export const PHASE_DATES = "July 19, 2026 onward";
 
+/**
+ * Exercise priority within a session (Phase 4 revision, 2026-08-24):
+ *   A — Essential: defines a successfully completed session. Tier A alone is a
+ *       valid ("minimum effective") session on a limited day.
+ *   B — Useful: complete when readiness and time allow.
+ *   C — Optional: accessories, mobility, extra trunk/durability work. Never
+ *       required for the workout to count as complete.
+ * Undefined tier (C1/G1 optional sessions) is treated as essential by the UI.
+ */
+export type Tier = "A" | "B" | "C";
+
 export type Exercise = {
   id: string;
   name: string;
@@ -18,6 +29,11 @@ export type Exercise = {
   weighted?: boolean;
   /** true → duration text field per set instead of reps */
   timed?: boolean;
+  /** Priority within the session — governs completion semantics and the UI. */
+  tier?: Tier;
+  /** Prescribed rest between hard sets, e.g. "2.5–3 min", "60–90 sec". Feeds the
+   *  pre-session duration estimate; do not shorten compound rest to save time. */
+  rest?: string;
   /**
    * How this lift is loaded. "assistance" is the one that matters: the machine
    * takes weight OFF her, so a lower number is harder and progress runs
@@ -91,18 +107,17 @@ export const SESSIONS: Record<SessionKey, Session> = {
     label: "Lower Strength",
     subtitle: "Knee + Ankle Priority",
     exercises: [
-      { id: "l1_rdl", name: "Romanian Deadlift (BB)", sets: 4, reps: "6 reps", target: "145 lbs", note: "Primary posterior-chain lift. Working weight 145 (4×6). This is the maintain phase — hold clean strength, don't chase a max. 1–3 reps in reserve; if the last set isn't there on a given day, stop a rep short. Hip hinge, flat back, bar close to legs. Drive hips forward and squeeze the glutes hard at the top — finish with the glutes, not the low back. If the back rounds or you feel it in the low back, the load is too high for that day. Do not skip." },
-      { id: "l1_hip_thrust", name: "Barbell / Machine Hip Thrust", sets: 4, reps: "8–10 reps", target: "Loaded", note: "A STAPLE now, not an accessory — this is the glute engine behind running economy, pelvic stability, and injury resilience. Hip-dominant and knee-friendly (minimal knee shear). Ribs down, full hip extension, hard top squeeze, 2–3 sec lower; drive with the glutes, never the low back (lumbar overextension is the only real risk). Machine if the gym has it, otherwise loaded bridge with a padded plate/DB across the hips. Progress the load only when the lower stays controlled." },
-      { id: "l1_leg_press", name: "Leg Press", sets: 4, reps: "12 reps", target: "235 lbs", note: "Now higher-rep (4×12) — capacity and knee-friendly volume, not a max. Feet high, stop at 90°, knee zero throughout. 1–3 reps in reserve. Add weight only when all 4×12 are clean." },
-      { id: "l1_leg_curl", name: "Leg Curl", sets: 3, reps: "12 reps", target: "75 lbs", note: "Working weight 75 (3×12). Keep the flawless 3-sec eccentric — the slow lower is the knee's protective factor, so quality governs the load, not the other way around. Hamstring resilience for running." },
-      { id: "l1_leg_ext", name: "Leg Extension (top 30° only)", sets: 3, reps: "12 reps", target: "115 lbs", note: "Working weight 115 (3×12). Protected ROM protocol continues — top-30° range only, non-negotiable, controlled throughout. Don't chase load past clean reps." },
-      { id: "l1_hip_abd", name: "Hip Abduction / Adduction", sets: 3, reps: "12–15 reps", target: "75 lbs", note: "Both directions. 2-sec hold at peak, slow return. Glute medius (abduction) + adductor. Ported from PT clamshell work — this is the hip-stability and glute-medius shaping piece, now on all three lower days. Lean torso slightly forward on abduction to bias glute over TFL." },
-      { id: "l1_calf_raise", name: "Calf Raises — Single Leg", sets: 3, reps: "12 each leg", target: "Bodyweight", note: "Right leg first. 3-sec lowering. Posterior tibial tendon resilience. Hold a DB if you want added load on a machine.", weighted: false },
-      { id: "l1_pt_band", name: "Banded Foot Adduction / Inversion", sets: 3, reps: "15 each foot", target: "Light band", note: "THE posterior tibial tendon loading lift (Kulig protocol). Band around forefoot, pull foot inward and down against resistance, 3-sec slow return. Right foot first. Do in supportive shoes. This is your run-readiness insurance.", weighted: false },
-      { id: "l1_cars", name: "Ankle CARs", sets: 2, reps: "5 each direction/side", target: "Bodyweight", note: "Controlled ankle circles, full range, slow. Mobility + joint awareness. Right ankle first.", weighted: false },
-      { id: "l1_pallof", name: "Pallof Press", sets: 3, reps: "10 each side", target: "Light cable/band", note: "Anti-rotation core. Side-on to cable, press out, hold 2 sec. Hips square.", weighted: false },
-      { id: "l1_tor_rot", name: "Torso Rotation (machine)", sets: 3, reps: "12 each side", target: "Light-moderate", note: "Controlled rotation, not ballistic. Slow return. Complements Pallof press — anti-rotation resists, rotation trains range.", weighted: false },
-      { id: "l1_balance", name: "Single-Leg Balance — Board", sets: 3, reps: "45 sec each leg", target: "Eyes closed", note: "Right foot first. Eyes closed when stable. Ankle proprioception.", weighted: false, timed: true },
+      // Tier A — essential
+      { id: "l1_rdl", name: "Romanian Deadlift (BB)", sets: 4, reps: "5–7 reps", target: "150 lbs", tier: "A", rest: "2.5–3 min", note: "Primary strength lift. Hold ~150 for 4×5–7; progress the load only after you own the top of the range clean at ~2 RIR — no grinders, no testing a max. Hip hinge, flat back, bar close; drive the hips forward and finish with the glutes, not the low back. If the back rounds or you feel it in the low back, the load's too high for that day. Stop a rep short if the last set isn't there." },
+      { id: "l1_leg_press", name: "Leg Press", sets: 3, reps: "8–10 reps", target: "255 lbs", tier: "A", rest: "2–3 min", note: "Strength range now — 3×8–10 (was 4×12). Pick a load for ~1–2 RIR. Feet high, stop at 90°, knee tracks straight and stays quiet throughout. Progress only when all three sets reach the top of the range clean." },
+      { id: "l1_leg_curl", name: "Leg Curl", sets: 3, reps: "8–12 reps", target: "70 lbs", tier: "A", rest: "75–90 sec", note: "Keep the 3-sec eccentric — the slow lower is the knee's protective factor, so quality governs the load. Hamstring resilience for running." },
+      // Tier B — useful
+      { id: "l1_leg_ext", name: "Leg Extension (top 30° only)", sets: 2, reps: "10–15 reps", target: "120 lbs", tier: "B", rest: "60–90 sec", note: "Down to 2 sets — the leg press already supplies plenty of quad volume. Protected-ROM protocol stays: top-30° range only, non-negotiable, controlled throughout." },
+      { id: "l1_calf_raise", name: "Calf Raise", sets: 3, reps: "10–15 reps", target: "Loaded", tier: "B", rest: "60–90 sec", note: "Kept because calf/ankle capacity is high-value for running durability. Full range, 3-sec lowering. Posterior tibial tendon resilience.", weighted: true },
+      // Tier C — optional durability (never let these turn L1 into a 70+ min session)
+      { id: "l1_pt_band", name: "Banded Foot Adduction / Inversion", sets: 3, reps: "15 each foot", target: "Light band", tier: "C", rest: "45–60 sec", note: "Optional posterior-tibial tendon loading (Kulig protocol) — run-readiness insurance when the ankle wants attention. Band around forefoot, pull inward and down, 3-sec slow return. Right foot first, supportive shoes.", weighted: false },
+      { id: "l1_cars", name: "Ankle CARs", sets: 2, reps: "5 each direction/side", target: "Bodyweight", tier: "C", rest: "—", note: "Optional. Controlled ankle circles, full range, slow. Mobility + joint awareness. Right ankle first.", weighted: false },
+      { id: "l1_balance", name: "Single-Leg Balance — Board", sets: 3, reps: "45 sec each leg", target: "Eyes closed", tier: "C", rest: "—", note: "Optional. Right foot first, eyes closed when stable. Ankle proprioception.", weighted: false, timed: true },
     ],
     cooldown: [
       "Standing Quad Stretch — 45 sec each leg",
@@ -112,17 +127,17 @@ export const SESSIONS: Record<SessionKey, Session> = {
   },
   U1: {
     label: "Upper Strength",
-    subtitle: "Pull-Up Progression",
+    subtitle: "Pull-Up Priority",
     exercises: [
-      { id: "u1_bench", name: "Barbell Bench Press", sets: 4, reps: "8 reps", target: "70 lbs", note: "Primary upper press. Stay at 70 for 4×8 until every set is technically clean at 1–2 reps in reserve — then take 75 again (double progression). Maintain phase: no testing, no grinding reps. Next milestone 80–90." },
-      { id: "u1_ohp", name: "Barbell Overhead Press", sets: 3, reps: "8 reps", target: "55 lbs", note: "PRIMARY vertical press (replaced the DB shoulder press). Working weight 55 (3×8). Ribs down, squeeze glutes, don't lean back into the low back. 1–2 reps in reserve. Next milestone 60." },
-      { id: "u1_pullup", name: "Assisted Pull-Up", sets: 4, reps: "4–6 reps", target: "55 lb assist", note: "The primary progression target — the biggest upper-body opportunity. LOG THE ASSISTANCE WEIGHT every set: '4×6' means nothing without it, and it's the number that has to come down. Milestone: 4×6 clean at the current assist, then drop the assistance by the smallest increment the machine has. Don't drop it if reps fall below 4 or the last set has nothing left. ALTERNATE by rotation: WEEK A = assisted pull-ups only (this exercise). WEEK B = assisted pull-ups PLUS the eccentric work below. Chip the assistance down over months toward a first strict, unassisted pull-up. Full hang, chin over bar.", weighted: false, loadType: "assistance" },
-      { id: "u1_pullup_ecc", name: "Assisted Pull-Up — Eccentric (Week B only)", sets: 3, reps: "4–5 reps", target: "Lighter assist", note: "WEEK B ONLY — skip this on the Week A rotation. Same machine, set the assist LIGHTER (a lower number) than your working sets. Pull up normally, then lower for 4–5 sec. Log the assistance weight. Eccentric overload builds the strength a free-bar eccentric would, no bar needed.", weighted: false, loadType: "assistance" },
-      { id: "u1_row", name: "Machine Row", sets: 3, reps: "10–12 reps", target: "85 lbs", note: "Working weight 85 (3×10–12). Fixed ROM removes the elbow tug of DB rows. Squeeze the shoulder blades, controlled return." },
-      { id: "u1_face_pull", name: "Face Pull", sets: 3, reps: "15–20 reps", target: "Light cable/band", note: "Shoulder-health insurance: rotator cuff, lower traps, posture, rear delts. Rope or band at eye height, pull to the forehead, elbows high, external-rotate at the end. Light and strict — this is a health lift, not a strength lift.", weighted: false },
-      { id: "u1_tricep", name: "Tricep (machine)", sets: 3, reps: "12 reps", target: "55 lbs", note: "Working weight 55 (3×12). Machine, not barbell — protects the prior elbow tweak. Flag if elbow pull returns." },
-      { id: "u1_hammer", name: "Hammer Curl (DB, neutral)", sets: 3, reps: "10–12 reps", target: "17.5 lbs", note: "Neutral grip — most elbow-friendly curl variation. Second weekly bicep session (U2 has supinated). FIRST TO PULL if elbow tug returns or worsens. No swing." },
-      { id: "u1_llr", name: "Lying Leg Raise", sets: 3, reps: "10–12 reps", target: "Bodyweight", note: "No bar needed. Lower back pinned to floor throughout — if it arches, bend the knees. Lower slowly, no momentum. Anti-extension lower-ab work.", weighted: false },
+      // Tier A — essential (pull-up ALWAYS first)
+      { id: "u1_pullup", name: "Assisted Pull-Up", sets: 4, reps: "4–6 reps", target: "44 lb assist", tier: "A", rest: "2–3 min", note: "Always first — the biggest upper-body opportunity. LOG THE ASSISTANCE every set: '4×6' means nothing without it, and it's the number that has to come down. When you hit 4×6 clean at the current assist with ~1–2 RIR, drop the assistance by the smallest machine increment and rebuild within 4–6. Don't drop it if reps fall below 4 or the last set turns into a grinder. Full hang, chin over bar. Chipping toward a first strict pull-up.", weighted: false, loadType: "assistance" },
+      { id: "u1_bench", name: "Barbell Bench Press", sets: 3, reps: "6–8 reps", target: "70 lbs", tier: "A", rest: "2–3 min", note: "3 sets now (was 4). Hold 70 for 6–8 until every set is clean at ~2 RIR, then take 75 (double progression). No testing, no grinders." },
+      { id: "u1_ohp", name: "Barbell Overhead Press", sets: 3, reps: "6–8 reps", target: "50 lbs", tier: "A", rest: "2–3 min", note: "Working weight 50. Do NOT force 55 on a low-readiness day. Ribs down, squeeze glutes, don't lean back into the low back. ~2 RIR." },
+      // Tier B — useful
+      { id: "u1_row", name: "Machine Row", sets: 3, reps: "8–12 reps", target: "85 lbs", tier: "B", rest: "75–90 sec", note: "Fixed ROM removes the elbow tug of DB rows. Squeeze the shoulder blades, controlled return." },
+      { id: "u1_face_pull", name: "Face Pull", sets: 2, reps: "15–20 reps", target: "Light cable/band", tier: "B", rest: "45–75 sec", note: "Shoulder/scapular health — rotator cuff, lower traps, rear delts, posture. Rope or band at eye height, pull to the forehead, elbows high, external-rotate at the end. Light and strict.", weighted: false },
+      // Tier C — optional trunk
+      { id: "u1_llr", name: "Lying Leg Raise", sets: 2, reps: "10–15 reps", target: "Bodyweight", tier: "C", rest: "45–75 sec", note: "Optional trunk work. Lower back pinned to the floor throughout — if it arches, bend the knees. Lower slowly, no momentum.", weighted: false },
     ],
     cooldown: [
       "Doorway Chest Stretch — 40 sec each side",
@@ -132,18 +147,15 @@ export const SESSIONS: Record<SessionKey, Session> = {
   },
   L2: {
     label: "Lower Hypertrophy",
-    subtitle: "Posterior Chain",
+    subtitle: "Unilateral + Posterior Chain",
     exercises: [
-      { id: "l2_rev_lunge", name: "Reverse Lunge", sets: 3, reps: "10 each leg", target: "Bodyweight → DBs", note: "Unilateral anchor. Step BACK, not forward — keeps weight over the front heel, minimizes knee shear (knee-rehab friendly). Control depth, do not chase range. Hold a rack/wall lightly if balance needs it. Add DBs when 3x10 each leg is steady. Attacks the left-right asymmetry directly. PROGRESSION: as knee tolerance improves, gradually work toward Bulgarian split squats (rear foot elevated — see the optional glute day). No forced timeline; only when the knee stays quiet the next morning." },
-      { id: "l2_rdl", name: "Romanian Deadlift (BB)", sets: 3, reps: "10–12 reps", target: "95 lbs", note: "RECALIBRATED Jun 17 alongside L1. Hypertrophy focus: lighter than L1, higher reps, controlled tempo. Feel the hamstring stretch under load, then DRIVE THE HIPS FORWARD and squeeze the glutes hard at the top — finish the lift with the glutes, not the low back." },
-      { id: "l2_leg_curl", name: "Leg Curl", sets: 3, reps: "12–15 reps", target: "75 lbs", note: "Working weight 75, higher reps than L1. 3-sec eccentric still applies. Hamstring volume." },
-      { id: "l2_hip_abd", name: "Hip Abduction / Adduction", sets: 3, reps: "12–15 reps", target: "75 lbs", note: "Both directions. 2-sec hold at peak. Glute medius + adductor. Supplement to PT clamshells." },
-      { id: "l2_calf", name: "Seated / Standing Calf Raise", sets: 4, reps: "12–15 reps", target: "Loaded", note: "Higher volume than L1. Soleus + gastroc. Posterior tibial support." },
-      { id: "l2_tib", name: "Tibialis Raises", sets: 3, reps: "15–20 reps", target: "Bodyweight → loaded", note: "Anterior chain. Heels down, lift forefoot, 2-sec hold. Shin resilience for running.", weighted: false },
-      { id: "l2_band_endur", name: "Banded Ankle Endurance (in/ev/dorsi)", sets: 1, reps: "~50 each direction", target: "Light band", note: "Alvarez-style high-rep tendon endurance. Band inversion, eversion, dorsiflexion. Controlled eccentric. High reps train the tendon for the repetitive demand of running, not max strength.", weighted: false },
-      { id: "l2_dead_bug", name: "Dead Bugs", sets: 3, reps: "10 each side", target: "Bodyweight", note: "Anti-extension core. Exhale fully, lower back pressed down.", weighted: false },
-      { id: "l2_tor_rot", name: "Torso Rotation (machine)", sets: 3, reps: "12 each side", target: "Light-moderate", note: "Controlled rotation, not ballistic. Slow return.", weighted: false },
-      { id: "l2_hip_thrust", name: "Barbell / Machine Hip Thrust", sets: 4, reps: "10–12 reps", target: "Loaded", note: "STAPLE lift, second dose of the week (the other is on the strength day). The glute engine for running economy, pelvic stability, and injury resilience. Hip-dominant and knee-friendly. Ribs down, full hip extension, hard top squeeze, 2–3 sec lower; drive with the glutes, not the low back. Machine if available, otherwise loaded bridge with a padded plate/DB across the hips. VARIATION: single-leg bodyweight bridge, 12 each leg, for the left-right asymmetry.", weighted: true },
+      // Tier A — essential
+      { id: "l2_rdl", name: "Romanian Deadlift (BB)", sets: 3, reps: "10–12 reps", target: "95 lbs", tier: "A", rest: "90–120 sec", note: "Hypertrophy RDL — lighter than L1, higher reps, controlled tempo. This is NOT the L1 150-lb strength load; keep it around 95. Feel the hamstring stretch under load, then drive the hips forward and finish with the glutes, not the low back." },
+      { id: "l2_rev_lunge", name: "Reverse Lunge", sets: 3, reps: "8–12 each leg", target: "Bodyweight → DBs", tier: "A", rest: "90–120 sec", note: "Unilateral anchor — attacks the left/right asymmetry. Step BACK, not forward, to keep weight over the front heel and minimize knee shear (knee-rehab friendly). Control depth, don't chase range; hold a rack lightly if balance needs it. Add DBs conservatively once 3×10 each leg is steady." },
+      { id: "l2_hip_thrust", name: "Barbell / Machine Hip Thrust", sets: 3, reps: "8–12 reps", target: "Loaded", tier: "A", rest: "90–120 sec", note: "The week's hip-thrust home now — not on both lower days. Glute engine for running economy, pelvic stability, injury resilience; hip-dominant and knee-friendly. Ribs down, full hip extension, hard top squeeze, 2–3 sec lower; drive with the glutes, never the low back. Machine if available, else loaded bridge with a padded plate/DB across the hips.", weighted: true },
+      // Tier B — useful
+      { id: "l2_leg_curl", name: "Leg Curl", sets: 2, reps: "10–15 reps", target: "70 lbs", tier: "B", rest: "60–90 sec", note: "2 sets is enough here — hamstrings are already worked from the RDL. Add a 3rd only if they're fresh. Keep the 3-sec eccentric." },
+      { id: "l2_hip_abd", name: "Hip Abduction / Adduction", sets: 2, reps: "12–20 reps", target: "75 lbs", tier: "B", rest: "45–75 sec", note: "Low-cost finisher. Both directions, 2-sec hold at peak, slow return. Glute medius + adductor. Lean torso slightly forward on abduction to bias glute over TFL." },
     ],
     cooldown: [
       "Pigeon / Figure-4 — 60 sec tighter side, 30 sec other",
@@ -153,17 +165,17 @@ export const SESSIONS: Record<SessionKey, Session> = {
   },
   U2: {
     label: "Upper Hypertrophy",
-    subtitle: "Carries + Core",
+    subtitle: "Volume + Supersets",
     exercises: [
-      { id: "u2_chest", name: "DB Chest Press", sets: 3, reps: "10–12 reps", target: "25 lbs", note: "Hypertrophy focus. Move to 30 when last 2 reps of each set controlled." },
-      { id: "u2_lat_pull", name: "Lat Pulldown", sets: 3, reps: "10–12 reps", target: "75–85 lbs", note: "Working range 75–85 (3×10–12). Lock in full ROM at the top of the range before nudging up. Rep quality over load. Next milestone 100." },
-      { id: "u2_farmer_carry", name: "Farmer Carry (heavy)", sets: 3, reps: "30–40 m", target: "Heavy DBs/trap bar", note: "Your once-weekly heavy carry — trunk stability, grip, work capacity, athleticism. Pick a load you can carry hard but with a tall, braced torso; ribs down, shoulders packed, walk with control (no leaning or hip hitch). Rest fully between trips. This is a load you should feel in your grip and core, not your low back." },
-      { id: "u2_row", name: "Machine Row", sets: 3, reps: "12 reps", target: "Lighter than U1", note: "Fixed ROM, removes elbow tug. Hypertrophy focus: lighter than the strength day, higher reps, controlled. Same machine as U1." },
-      { id: "u2_lat_raise", name: "Lateral Raise (DB)", sets: 3, reps: "12–15 reps", target: "10 lbs", note: "Accessory shoulder health. Shoulder width, light, strict, no swing. Lead with elbows." },
-      { id: "u2_face_pull", name: "Face Pull", sets: 3, reps: "15–20 reps", target: "Light cable/band", note: "Second weekly dose — rotator cuff, lower traps, rear delts, posture. Rope or band at eye height, pull to the forehead, elbows high, external-rotate at the end. Light and strict.", weighted: false },
-      { id: "u2_bicep", name: "Bicep Curl (DB, supinated)", sets: 3, reps: "12 reps", target: "17.5 lbs", note: "Standard supinated curl, 3×12. Move to 20 when all sets are clean. Full ROM, no swing." },
-      { id: "u2_pallof", name: "Pallof Press", sets: 3, reps: "10 each side", target: "Light cable/band", note: "Anti-rotation core. Hold 2 sec at full extension.", weighted: false },
-      { id: "u2_side_plank", name: "Side Plank", sets: 3, reps: "35–45 sec each side", target: "Bodyweight", note: "Anti-lateral-flexion. Move to hip dips when 45 sec easy.", weighted: false, timed: true },
+      // Tier A — essential
+      { id: "u2_lat_pull", name: "Lat Pulldown", sets: 3, reps: "8–12 reps", target: "75–85 lbs", tier: "A", rest: "75–90 sec", note: "Lock in full ROM at the top of the range before nudging up. Rep quality over load. Next milestone 100." },
+      { id: "u2_chest", name: "Chest Press", sets: 3, reps: "10–15 reps", target: "25 lbs", tier: "A", rest: "superset w/ row", note: "Superset with the row (non-competing — saves time). Hypertrophy focus, controlled tempo. Move up when the last 2 reps of each set stay clean." },
+      { id: "u2_row", name: "Machine / Cable Row", sets: 3, reps: "10–15 reps", target: "Lighter than U1", tier: "A", rest: "superset w/ chest press", note: "Superset with chest press. Fixed ROM, hypertrophy focus — lighter than the U1 strength row, higher reps, controlled. Squeeze the shoulder blades." },
+      // Tier B — useful
+      { id: "u2_lat_raise", name: "Lateral Raise (DB)", sets: 3, reps: "12–20 reps", target: "10 lbs", tier: "B", rest: "superset w/ curls", note: "Superset with the biceps curl. Light, strict, no swing — lead with the elbows." },
+      { id: "u2_bicep", name: "Bicep Curl (DB, supinated)", sets: 3, reps: "10–15 reps", target: "17.5 lbs", tier: "B", rest: "superset w/ lateral raise", note: "Superset with lateral raises. Full ROM, no swing. Move up when all sets are clean." },
+      // Tier C — optional
+      { id: "u2_tricep", name: "Triceps (machine/cable)", sets: 2, reps: "10–15 reps", target: "55 lbs", tier: "C", rest: "45–75 sec", note: "Optional — add when time and readiness allow. Machine or cable to protect the prior elbow tweak; flag if elbow pull returns." },
     ],
     cooldown: [
       "Doorway Chest Stretch — 40 sec each side",
@@ -262,7 +274,9 @@ export const ROLLING_RULES: string[] = [
   "Prefer not to place a run progression immediately after a demanding lower day.",
   "After two or three hard/moderate days in a row, recommend an easy aerobic/PT day or full recovery.",
   "Easy swimming, walking, mobility, and PT can go between demanding sessions.",
-  "Keep roughly 1–3 reps in reserve on most resistance sets.",
+  "Most compound working sets end at ~2 RIR — occasionally 1, rarely 0. Isolation/accessory work may approach failure when it fits. Never require failure to progress, and don't default the compounds to 0 RIR.",
+  "The four lifting sessions (L1→U1→L2→U2) are a rotation and a weekly ceiling, not a quota. If only three happen in a week, resume the rotation with the next one — don't cram a fourth into the last day or add load to compensate.",
+  "Prioritize Tier A on limited days; Tier A alone is a complete session. Tier C (optional accessories/mobility) never determines whether the workout counts.",
   "Saturday defaults to recovery unless she chooses otherwise; on Sunday, resume the next eligible session rather than restarting an arbitrary calendar week.",
 ];
 
