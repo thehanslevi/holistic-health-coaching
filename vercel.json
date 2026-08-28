@@ -3,6 +3,10 @@
     {
       "path": "/api/push/send",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/program/recalibrate",
+      "schedule": "0 13 * * 1"
     }
   ]
 }

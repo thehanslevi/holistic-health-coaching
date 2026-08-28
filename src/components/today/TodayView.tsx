@@ -19,6 +19,7 @@ import BriefWhy, { type BriefInputs } from "@/components/today/BriefWhy";
 import { useApp } from "@/components/AppShell";
 import CalendarOverlay from "@/components/today/CalendarOverlay";
 import PushOptIn from "@/components/today/PushOptIn";
+import BaselineProposals from "@/components/today/BaselineProposals";
 import ResumeSessionCard from "@/components/today/ResumeSessionCard";
 import WeekBalance from "@/components/train/WeekBalance";
 
@@ -375,6 +376,9 @@ export default function TodayView() {
       <div className="mt-4">
         <WeekBalance />
       </div>
+
+      {/* Self-updating baselines — earned target changes to confirm (workstream #1) */}
+      <BaselineProposals />
 
       {/* Resume an unfinished session (survives an app reload) */}
       <ResumeSessionCard />
