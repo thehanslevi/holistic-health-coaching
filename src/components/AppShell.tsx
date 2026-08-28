@@ -176,6 +176,31 @@ export default function AppShell() {
     setUnlocked(!!getPasscode());
   }, []);
 
+  // iOS keeps an installed PWA suspended and resumes it WITHOUT reloading, which
+  // froze the whole view on an old day — stale date, stale counts, and an old
+  // deployed bundle (a July screen still showing in late August). When the app
+  // returns to the foreground on a new calendar day, or after a long spell in the
+  // background, reload so it reflects today and picks up the latest build.
+  useEffect(() => {
+    const mountedDay = new Date().toDateString();
+    let hiddenAt: number | null = null;
+    const onChange = () => {
+      if (document.visibilityState !== "visible") {
+        hiddenAt = Date.now();
+        return;
+      }
+      const dayChanged = new Date().toDateString() !== mountedDay;
+      const longAway = hiddenAt != null && Date.now() - hiddenAt > 30 * 60 * 1000;
+      if (dayChanged || longAway) location.reload();
+    };
+    document.addEventListener("visibilitychange", onChange);
+    window.addEventListener("focus", onChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onChange);
+      window.removeEventListener("focus", onChange);
+    };
+  }, []);
+
   const refreshLogs = useCallback(async () => {
     setLogsLoading(true);
     try {

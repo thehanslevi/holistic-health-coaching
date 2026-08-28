@@ -326,9 +326,17 @@ export default function TodayView() {
               latestHealth.resting_hr != null);
           if (!chip && !hasHealth) return null;
           const numCls = healthIsToday ? "text-faint" : "text-muted"; // dim provisional
+          // How old is the newest reading? Multiple days means the phone's Health
+          // Auto Export pipeline has stalled, and everything here (including the
+          // cycle estimate) is untrustworthy — flag it plainly and don't hand out
+          // confident cycle advice off stale data.
+          const ageDays = latestHealth?.date
+            ? Math.round((Date.parse(today) - Date.parse(latestHealth.date)) / 86400000)
+            : null;
+          const stale = ageDays != null && ageDays >= 3;
           return (
             <div className="mt-3.5 pt-3 border-t border-line">
-              <div className="flex gap-3.5 flex-wrap text-[11px] text-faint">
+              <div className={`flex gap-3.5 flex-wrap text-[11px] text-faint ${stale ? "opacity-60" : ""}`}>
                 {chip && (
                   <span>
                     cycle <span className="num text-muted">{chip}</span>
@@ -350,15 +358,17 @@ export default function TodayView() {
                   </span>
                 )}
               </div>
-              {/* No freshness prose. Numbers just show; when the day hasn't synced
-                  yet, a terse "from {date}" marks that they're older. */}
-              {hasHealth && !healthIsToday && latestHealth?.date && (
-                <div className="text-[10px] text-hold mt-1.5">from {shortDate(latestHealth.date)}</div>
-              )}
-              {/* One plain line of what the cycle phase means today (chip above
-                  stays uniform). Skipped on a bleeding day — the period note in
-                  the signal strip already covers that. */}
-              {cycle && cyclePractical(cycle) && (
+              {hasHealth && stale && latestHealth?.date ? (
+                <div className="text-[10px] text-hold mt-1.5">
+                  Sync stalled · from {shortDate(latestHealth.date)} ({ageDays}d)
+                </div>
+              ) : hasHealth && !healthIsToday && latestHealth?.date ? (
+                <div className="text-[10px] text-faint mt-1.5">from {shortDate(latestHealth.date)}</div>
+              ) : null}
+              {/* One plain line of what the cycle phase means today — only while the
+                  pipeline is current. Skipped on a bleeding day (the signal strip
+                  covers that) and when the data's stale (the phase can't be trusted). */}
+              {!stale && cycle && cyclePractical(cycle) && (
                 <div className="text-[11px] text-faint mt-2 leading-snug">{cyclePractical(cycle)}</div>
               )}
             </div>
