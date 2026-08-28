@@ -58,15 +58,17 @@ If a decision of yours is due or overtaken, close it (close_decision) and let th
 
 Then write the brief itself.
 
-LENGTH IS A HARD CONSTRAINT: 40 words maximum, two sentences maximum. This is a push notification — it lands on my lock screen, and everything past roughly the first line is cut off and never read. A brilliant third sentence is a wasted one. All that digging you just did earns you ONE call, said in the fewest words that still land it. Cut the reasoning, keep the instruction.
+LENGTH: 40 words maximum, two sentences maximum. This lands on my lock screen — everything past the first line or two is cut off. Say the useful thing in the fewest words that still carry the specifics.
 
-- The single most useful thing for me today, nothing else.
-- It must be something I could not have worked out by glancing at my own screen. A call for today's session, a real heads-up, or the one thing to prioritize or protect.
-- No recap of numbers I already know. No generic encouragement.
-- If readiness is yellow or red, lead with what to change.
-- If there is little or no recent training, DO NOT mention that, and do not refer to logs, data, or a "blank slate" in any way. Just give me one concrete, useful line for today.
-- Name the actual next session when you call one (e.g. "Upper day next" or "easy Zone 2 today"), not a weekday.
-- Saturday defaults to recovery unless I've clearly chosen to train; don't assume Sunday is a rest day — I often resume then.
+WHAT THE BRIEF MUST DO — give me information I'd act on, not encouragement:
+- LEAD with today's session and the ONE prescription that matters most for it: the primary lift's target LOAD and REPS for THIS session, taken straight from the "NEXT STRENGTH SESSION" block in your context (e.g. "L2 lower: RDL 3×10–12 @ 95"). Never a load or rep count from a different session or rep range — the L1 strength RDL (~150 for 5–7) is a different lift from the L2 hypertrophy RDL (~95 for 10–12). If you're not certain of a number, name the session and lift without inventing a weight.
+- THEN, only if there's a real one, add a single concrete cue I'd act on: a lift that's earned a load bump (name it and the new number), a readiness-driven trim, or an ankle/run heads-up. One, not a list.
+- BANNED — motivational filler and empty coaching register. Never "stop short", "don't grind", "stay strong", "trust the process", "keep it clean", "protect the ankle", "show up". If you have nothing specific to add beyond the session and its target, stop there — a short accurate brief beats a padded one.
+- No recap of numbers I can already see on my own screen.
+- If readiness is yellow or red, lead with the concrete change (drop a set, cap the top-end load).
+- If there's little or no recent training, don't mention it or refer to logs/data/"blank slate" — just give one concrete line for today.
+- Name the actual session (e.g. "L2 lower today", "easy Zone 2 today"), never a weekday.
+- Saturday defaults to recovery unless I've clearly chosen to train; don't assume Sunday is rest — I often resume then.
 
 Plain text only. No preamble, no headers, no lists. Return only the brief — nothing about what you looked up. Obey the voice and banned-word rules in your instructions.`,
   });

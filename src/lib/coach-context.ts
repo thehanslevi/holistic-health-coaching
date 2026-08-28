@@ -14,6 +14,21 @@ import {
 
 const tierWord = (t?: Tier): string =>
   t === "B" ? "Useful" : t === "C" ? "Optional" : "Essential";
+
+// The cycle phase is estimated forward from the last logged period. If nothing
+// has synced in weeks, we genuinely can't tell late-luteal from an unlogged new
+// period, so the coach must not assert a phase (it told her "you're in luteal
+// phase" off 3-week-old data). Hedge hard past ~3 weeks of silence.
+function cycleLineFor(days: CycleDay[], today: string): string | null {
+  const line = cycleContextLine(deriveCycleState(days, today));
+  if (!line) return null;
+  const latest = days.reduce((m, d) => (d.date > m ? d.date : m), "");
+  const staleDays = latest ? Math.round((Date.parse(today) - Date.parse(latest)) / 86400000) : null;
+  if (staleDays != null && staleDays > 21) {
+    return `no cycle data has synced in ${staleDays} days, so any phase estimate is unreliable — do NOT state or lead with a cycle phase; if it comes up, just say the tracking is behind.`;
+  }
+  return line;
+}
 import { resolveProgram } from "@/lib/program-resolve";
 import { supabase } from "@/lib/supabase";
 import {
@@ -204,7 +219,7 @@ export async function buildCoachCore(): Promise<string> {
     if (bits.length) lines.push(`Recovery check (${recovery.date}): ${bits.join(", ")}.`);
   }
 
-  const cycleLine = cycleContextLine(deriveCycleState((cycleRes.data ?? []) as CycleDay[]));
+  const cycleLine = cycleLineFor((cycleRes.data ?? []) as CycleDay[], today);
   if (cycleLine) lines.push(`Menstrual cycle: ${cycleLine}`);
 
   const lastRun = ((lastRunRes.data ?? []) as LogRow[]).find(isRunLog);
@@ -454,7 +469,7 @@ export async function buildCoachContext(): Promise<{
       lines.push(`Apple Health (as of ${latest.date}): ${bits.join(", ")}.`);
   }
 
-  const cycleLine = cycleContextLine(deriveCycleState((cycleRes.data ?? []) as CycleDay[]));
+  const cycleLine = cycleLineFor((cycleRes.data ?? []) as CycleDay[], todayISO());
   if (cycleLine) lines.push(`Menstrual cycle: ${cycleLine}`);
 
   if (logs.length) {
