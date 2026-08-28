@@ -13,6 +13,7 @@ import {
 import { runTraffic, todayISO } from "@/lib/program";
 import { isRunLog, type Checkin, type HealthRow, type Readiness } from "@/lib/types";
 import { cycleChip, cyclePractical, type CycleState } from "@/lib/cycle";
+import { freshness } from "@/lib/freshness";
 import { primeVoices, speak, speechSupported, stopSpeaking } from "@/lib/speech";
 import { Button, Dots, inputClass } from "@/components/ui";
 import BriefWhy, { type BriefInputs } from "@/components/today/BriefWhy";
@@ -322,22 +323,25 @@ export default function TodayView() {
               latestHealth.resting_hr != null);
           if (!chip && !hasHealth) return null;
           const numCls = healthIsToday ? "text-faint" : "text-muted"; // dim provisional
-          // How old is the newest reading? Multiple days means the phone's Health
-          // Auto Export pipeline has stalled, and everything here (including the
-          // cycle estimate) is untrustworthy — flag it plainly and don't hand out
-          // confident cycle advice off stale data.
-          const ageDays = latestHealth?.date
-            ? Math.round((Date.parse(today) - Date.parse(latestHealth.date)) / 86400000)
-            : null;
-          const stale = ageDays != null && ageDays >= 3;
+          // Freshness is judged per pipeline (workstream #4): health and cycle
+          // sync independently, so each is checked against its OWN latest reading
+          // — not one gated on the other. Health stale after 3 days; the cycle
+          // estimate is unreliable once nothing's synced in ~3 weeks.
+          const health = freshness(latestHealth?.date, 3, today);
+          const cycleStale = cycle ? freshness(cycle.dataThrough, 21, today).stale : true;
           return (
             <div className="mt-3.5 pt-3 border-t border-line">
-              <div className={`flex gap-3.5 flex-wrap text-[11px] text-faint ${stale ? "opacity-60" : ""}`}>
-                {chip && (
-                  <span>
-                    cycle <span className="num text-muted">{chip}</span>
-                  </span>
-                )}
+              <div className={`flex gap-3.5 flex-wrap text-[11px] text-faint ${health.stale ? "opacity-60" : ""}`}>
+                {chip &&
+                  (cycleStale ? (
+                    <span>
+                      cycle <span className="text-hold">tracking behind</span>
+                    </span>
+                  ) : (
+                    <span>
+                      cycle <span className="num text-muted">{chip}</span>
+                    </span>
+                  ))}
                 {latestHealth?.sleep_hours != null && (
                   <span>
                     sleep <span className={`num ${numCls}`}>{latestHealth.sleep_hours.toFixed(1)}</span>h
@@ -354,17 +358,17 @@ export default function TodayView() {
                   </span>
                 )}
               </div>
-              {hasHealth && stale && latestHealth?.date ? (
+              {hasHealth && health.stale && latestHealth?.date ? (
                 <div className="text-[10px] text-hold mt-1.5">
-                  Sync stalled · from {shortDate(latestHealth.date)} ({ageDays}d)
+                  Sync stalled · from {shortDate(latestHealth.date)} ({health.ageDays}d)
                 </div>
               ) : hasHealth && !healthIsToday && latestHealth?.date ? (
                 <div className="text-[10px] text-faint mt-1.5">from {shortDate(latestHealth.date)}</div>
               ) : null}
-              {/* One plain line of what the cycle phase means today — only while the
-                  pipeline is current. Skipped on a bleeding day (the signal strip
-                  covers that) and when the data's stale (the phase can't be trusted). */}
-              {!stale && cycle && cyclePractical(cycle) && (
+              {/* What the cycle phase means today — only while cycle tracking is
+                  current. Skipped on a bleeding day (the signal strip covers that)
+                  and when the estimate is stale (it can't be trusted). */}
+              {!cycleStale && cycle && cyclePractical(cycle) && (
                 <div className="text-[11px] text-faint mt-2 leading-snug">{cyclePractical(cycle)}</div>
               )}
             </div>

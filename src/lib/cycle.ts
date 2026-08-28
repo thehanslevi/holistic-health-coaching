@@ -18,6 +18,9 @@ export type CycleState = {
   avgLength: number | null;
   bleedingToday: boolean;
   label: string; // e.g. "Luteal · ~day 22" or "Menstrual · day 2"
+  /** Date of the most recent cycle data point, so the estimate can be judged on
+   *  its OWN freshness — not on whether some other pipeline (health) is current. */
+  dataThrough: string | null;
 };
 
 const DAY = 86400000;
@@ -51,6 +54,7 @@ export function deriveCycleState(
 ): CycleState {
   const starts = periodStarts(days).filter((s) => s <= today);
   const bleedingToday = days.some((d) => d.date === today && d.is_period);
+  const dataThrough = days.reduce<string | null>((m, d) => (m == null || d.date > m ? d.date : m), null);
 
   if (starts.length === 0) {
     return {
@@ -61,6 +65,7 @@ export function deriveCycleState(
       avgLength: null,
       bleedingToday,
       label: bleedingToday ? "Menstrual" : "Cycle — no data yet",
+      dataThrough,
     };
   }
 
@@ -86,6 +91,7 @@ export function deriveCycleState(
       avgLength,
       bleedingToday,
       label: `Period · day ${cycleDay}`,
+      dataThrough,
     };
   }
 
@@ -103,7 +109,7 @@ export function deriveCycleState(
   const label =
     phase === "unknown" ? `Cycle · ~day ${cycleDay} · period may be near` : `Cycle · ~day ${cycleDay}`;
 
-  return { lastStart, cycleDay, phase, approximate, avgLength, bleedingToday, label };
+  return { lastStart, cycleDay, phase, approximate, avgLength, bleedingToday, label, dataThrough };
 }
 
 /**
