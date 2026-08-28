@@ -3,7 +3,18 @@ import { buildCoachAnalysis } from "@/lib/coach-analysis";
 import { cycleContextLine, deriveCycleState, type CycleDay } from "@/lib/cycle";
 import { formatLogAsText } from "@/lib/format";
 import { daysAgoISO, mondayOf, todayISO } from "@/lib/day";
-import { PHASE, runTraffic } from "@/lib/program";
+import {
+  PHASE,
+  SESSION_SEQUENCE,
+  nextStrengthSession,
+  runTraffic,
+  type SessionKey,
+  type Tier,
+} from "@/lib/program";
+
+const tierWord = (t?: Tier): string =>
+  t === "B" ? "Useful" : t === "C" ? "Optional" : "Essential";
+import { resolveProgram } from "@/lib/program-resolve";
 import { supabase } from "@/lib/supabase";
 import {
   isRunLog,
@@ -12,6 +23,7 @@ import {
   type HealthRow,
   type LogRow,
   type ProfileEntry,
+  type ProgramOverride,
 } from "@/lib/types";
 
 // The living profile Hannah maintains — authoritative, current, and overrides
@@ -65,7 +77,7 @@ export async function buildCoachCore(): Promise<string> {
   const monday = mondayOf();
   const today = todayISO();
 
-  const [weekRes, checkinRes, healthRes, hrvRes, recoveryRes, cycleRes, profileRes, decisions, lastRunRes, recentRes] =
+  const [weekRes, checkinRes, healthRes, hrvRes, recoveryRes, cycleRes, profileRes, decisions, lastRunRes, recentRes, ovrRes, phaseRes] =
     await Promise.all([
       db.from("hrl_logs").select("logged_at, kind, session_key").gte("logged_at", monday),
       db.from("hrl_checkins").select("*").order("date", { ascending: false }).limit(1),
@@ -95,6 +107,8 @@ export async function buildCoachCore(): Promise<string> {
         .gte("logged_at", daysAgoISO(21))
         .order("logged_at", { ascending: false })
         .limit(50),
+      db.from("hrl_program_overrides").select("exercise_id, target, note"),
+      db.from("hrl_phases").select("program_snapshot").eq("status", "active").limit(1),
     ]);
 
   const week = (weekRes.data ?? []) as { logged_at: string; kind: string; session_key: string | null }[];
@@ -231,6 +245,33 @@ export async function buildCoachCore(): Promise<string> {
       `RECENT TRAINING (last 21 days, newest first) — a skeleton, not the detail. For weights, reps, and how it went, use query_logs / get_run_history / get_exercise_progression: ${recent
         .map((r) => `${md(r.logged_at)} ${label(r)}`)
         .join(" · ")}`,
+    );
+  }
+
+  // The upcoming strength session's ACTUAL prescription, resolved from the live
+  // program (+ her overrides). Without this the coach invented loads from her
+  // most recent log — carrying the L1 strength RDL (150 for 5–7) onto the L2
+  // hypertrophy day (95 for 10–12), which is both wrong and unsafe. Any load the
+  // coach names for the next session must come from HERE, not from the last log.
+  const lastStrengthKey = recent.find(
+    (r) =>
+      r.kind === "session" &&
+      r.session_key &&
+      SESSION_SEQUENCE.includes(r.session_key as SessionKey),
+  )?.session_key as SessionKey | undefined;
+  const nextKey = nextStrengthSession(lastStrengthKey ?? null);
+  const resolved = resolveProgram(
+    (phaseRes.data?.[0] as { program_snapshot?: unknown } | undefined)?.program_snapshot ?? null,
+    (ovrRes.data ?? []) as ProgramOverride[],
+  );
+  const nextSession = resolved[nextKey];
+  if (nextSession) {
+    const list = nextSession.exercises
+      .map((e) => `- ${e.name}: ${e.sets}×${e.reps} @ ${e.target} [${tierWord(e.tier)}]`)
+      .join("\n");
+    lines.push(
+      "",
+      `NEXT STRENGTH SESSION IN THE ROTATION: ${nextKey} — ${nextSession.label} (${nextSession.subtitle}). These are THIS session's prescribed loads — the authoritative plan for it:\n${list}\nWhen you name a weight or rep count for this session, take it from HERE. NEVER carry a load or rep count from a different session or rep range into it — each lift is session-specific (the L1 RDL is a ~strength load for 5–7 reps; the L2 RDL is a ~hypertrophy load for 10–12 reps — different lifts at different weights, do not conflate). Tier A is the essential core; B is useful; C is optional and never required to finish the session.`,
     );
   }
 
