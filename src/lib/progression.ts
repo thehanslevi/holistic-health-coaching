@@ -105,6 +105,7 @@ export async function computeProposals(db: SupabaseClient): Promise<ProgramPropo
   }
   const raw = (parsed as { proposals?: unknown })?.proposals;
   if (!Array.isArray(raw)) return [];
+  const norm = (s: string | undefined) => (s ?? "").trim().toLowerCase();
   return raw
     .filter(
       (p): p is ProgramProposal =>
@@ -112,6 +113,9 @@ export async function computeProposals(db: SupabaseClient): Promise<ProgramPropo
         typeof (p as ProgramProposal).exercise_id === "string" &&
         typeof (p as ProgramProposal).proposed_target === "string",
     )
+    // Drop no-ops: the model sometimes "proposes" the current target unchanged
+    // ("already at 120, no change needed") — that isn't a change to confirm.
+    .filter((p) => norm(p.proposed_target) !== norm(p.current_target))
     .slice(0, 5);
 }
 
