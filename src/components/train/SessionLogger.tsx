@@ -11,10 +11,23 @@ import {
   FUEL_TIMING_OPTIONS,
   PT_CIRCUIT,
   SESSIONS,
+  sessionDuration,
+  tierLabel,
   todayISO,
   type Exercise,
   type SessionKey,
+  type Tier,
 } from "@/lib/program";
+
+// Tier A/B/C visual language, shared by the intro rail, the in-session rail, and
+// the tier tag. A = essential (volt), B = useful (muted), C = optional (faint).
+const TIER_BAR: Record<Tier, string> = { A: "bg-accent", B: "bg-muted", C: "bg-surface-3" };
+const TIER_TAG: Record<Tier, string> = {
+  A: "bg-accent text-accent-ink",
+  B: "border border-line-strong text-muted",
+  C: "border border-dashed border-line-strong text-faint",
+};
+const tierOf = (e: Exercise): Tier => e.tier ?? "A";
 import type {
   Checkin,
   FuelStatus,
@@ -79,6 +92,7 @@ function parseSetSpeech(text: string): { reps?: string; weight?: string } {
 type Stage =
   | { name: "intro" }
   | { name: "exercise"; idx: number }
+  | { name: "checkpoint" } // shown once, after the last essential (Tier A) lift
   | { name: "finish" }
   | { name: "saved"; row: LogRow };
 
@@ -273,6 +287,24 @@ export default function SessionLogger({
   // it has to reflect anything the coach swapped, added, or dropped.
   const { logs, addLog, askCoach, overrides, sessions } = useApp();
   const session = sessions[sessionKey];
+
+  // Tier structure of this session: where the essential (Tier A) block ends and
+  // whether there's anything past it. Drives the rail, the duration estimate, and
+  // the "essential work done" checkpoint.
+  const duration = useMemo(() => sessionDuration(session.exercises), [session.exercises]);
+  const lastEssentialIdx = useMemo(() => {
+    let last = -1;
+    session.exercises.forEach((e, i) => {
+      if (tierOf(e) === "A") last = i;
+    });
+    return last;
+  }, [session.exercises]);
+  const hasNonEssential = lastEssentialIdx >= 0 && lastEssentialIdx < session.exercises.length - 1;
+  // Untiered sessions (C1/G1) default every lift to Tier A — no tier language to
+  // show. Only surface tiers when the session actually distinguishes them.
+  const tiered = useMemo(() => session.exercises.some((e) => tierOf(e) !== "A"), [session.exercises]);
+  // The checkpoint fires only the first time she leaves the last essential lift.
+  const pastCheckpoint = useRef(false);
 
   const prev = useMemo(() => lastSessionLog(logs, sessionKey), [logs, sessionKey]);
 
@@ -499,8 +531,35 @@ export default function SessionLogger({
           {session.label.split(" ").slice(1).join(" ") || session.subtitle.split(" ")[0]}
         </h1>
         <div className="label !text-muted mt-3">
-          {session.subtitle.toUpperCase()} · {session.exercises.length} exercises · 45 min cap
+          {session.subtitle.toUpperCase()} · ≈{duration.normal} min
         </div>
+        {/* Tier rail — how the session is shaped: essential → useful → optional */}
+        {tiered && (
+          <>
+            <div className="flex gap-1 mt-3.5">
+              {session.exercises.map((e) => (
+                <span key={e.id} className={`flex-1 h-1.5 ${TIER_BAR[tierOf(e)]}`} />
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+              {(["A", "B", "C"] as Tier[]).map((t) => {
+                const n = session.exercises.filter((e) => tierOf(e) === t).length;
+                if (!n) return null;
+                return (
+                  <span
+                    key={t}
+                    className={`display text-[10px] tracking-[0.08em] px-1.5 py-0.5 ${TIER_TAG[t]}`}
+                  >
+                    {n} {tierLabel(t)}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="label !text-faint mt-2">
+              Essential alone ≈{duration.essential} min · everything ≈{duration.all} min
+            </div>
+          </>
+        )}
         {prev && (
           <div className="label mt-2">
             Last time: {prev.logged_at} — your numbers are pre-loaded
@@ -707,15 +766,26 @@ export default function SessionLogger({
           {session.exercises.map((e, i) => (
             <span
               key={e.id}
-              className={`flex-1 h-[4px] ${
-                i < idx ? "bg-accent" : i === idx ? "bg-accent/50" : "bg-surface-2"
+              className={`flex-1 h-[4px] ${TIER_BAR[tierOf(e)]} ${
+                i === idx ? "ring-1 ring-inset ring-white" : i > idx ? "opacity-40" : ""
               }`}
             />
           ))}
         </div>
 
         {/* Exercise poster */}
-        <h2 className="display-i text-[38px] text-ink mt-6 leading-[0.95]">{ex.name}</h2>
+        {tiered && (
+          <div className="mt-5">
+            <span
+              className={`display text-[10px] tracking-[0.1em] px-1.5 py-0.5 ${TIER_TAG[tierOf(ex)]}`}
+            >
+              {tierLabel(tierOf(ex))}
+            </span>
+          </div>
+        )}
+        <h2 className={`display-i text-[38px] text-ink leading-[0.95] ${tiered ? "mt-2.5" : "mt-6"}`}>
+          {ex.name}
+        </h2>
         <div className="flex items-center gap-3 mt-2.5 flex-wrap">
           <span className="label !text-muted">
             {ex.sets} × {ex.reps.toUpperCase()}
@@ -841,7 +911,19 @@ export default function SessionLogger({
           <Button variant="secondary" size="md" className="flex-1" onClick={() => goTo(idx - 1)}>
             ← {idx === 0 ? "Intro" : "Prev"}
           </Button>
-          <Button size="md" className="flex-[2]" onClick={() => goTo(idx + 1)}>
+          <Button
+            size="md"
+            className="flex-[2]"
+            onClick={() => {
+              // Interpose the "essential done" checkpoint the first time she
+              // leaves the last Tier A lift.
+              if (idx === lastEssentialIdx && hasNonEssential && !pastCheckpoint.current) {
+                setStage({ name: "checkpoint" });
+              } else {
+                goTo(idx + 1);
+              }
+            }}
+          >
             {idx === session.exercises.length - 1 ? "Finish →" : "Next →"}
           </Button>
         </div>
@@ -849,6 +931,47 @@ export default function SessionLogger({
         {restEndsAt && (
           <RestTimer endsAt={restEndsAt} onDismiss={() => setRestEndsAt(null)} voice={voiceOn} />
         )}
+      </div>
+    );
+  }
+
+  // ── CHECKPOINT — after the last essential lift ──
+  if (stage.name === "checkpoint") {
+    return (
+      <div className="px-5 pb-8 fade-up">
+        <div className="pt-6">
+          <button onClick={onClose} className="label hover:text-muted cursor-pointer">
+            ← Exit
+          </button>
+        </div>
+        <div className="mt-8 border border-accent bg-accent/[0.06] p-5">
+          <div className="label !text-accent-dim mb-2.5">✓ Essential work done</div>
+          <div className="text-[16px] text-ink leading-snug mb-1.5">That&apos;s a complete session.</div>
+          <div className="text-[13px] text-muted leading-relaxed">
+            Keep going for the useful and optional work, or save here — this already counts.
+          </div>
+        </div>
+        <Button
+          size="lg"
+          className="mt-5"
+          onClick={() => {
+            pastCheckpoint.current = true;
+            goTo(lastEssentialIdx + 1);
+          }}
+        >
+          Keep going — useful next →
+        </Button>
+        <Button
+          variant="secondary"
+          size="lg"
+          className="mt-2.5"
+          onClick={() => {
+            pastCheckpoint.current = true;
+            setStage({ name: "finish" });
+          }}
+        >
+          Save session
+        </Button>
       </div>
     );
   }

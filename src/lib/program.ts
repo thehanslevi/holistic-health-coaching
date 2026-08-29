@@ -280,6 +280,62 @@ export const ROLLING_RULES: string[] = [
   "Saturday defaults to recovery unless she chooses otherwise; on Sunday, resume the next eligible session rather than restarting an arbitrary calendar week.",
 ];
 
+/** Plain label for a tier (undefined tiers on C1/G1 read as essential). */
+export function tierLabel(tier?: Tier): string {
+  return tier === "B" ? "Useful" : tier === "C" ? "Optional" : "Essential";
+}
+
+/** Seconds of programmed rest between hard sets, parsed from the `rest` string. */
+function restSeconds(rest?: string): number {
+  if (!rest) return 60;
+  if (/superset/i.test(rest)) return 30;
+  if (rest.trim() === "—") return 20;
+  const min = rest.match(/(\d+(?:\.\d+)?)\s*(?:[–-]\s*(\d+(?:\.\d+)?))?\s*min/i);
+  if (min) return ((Number(min[1]) + (min[2] ? Number(min[2]) : Number(min[1]))) / 2) * 60;
+  const sec = rest.match(/(\d+)\s*(?:[–-]\s*(\d+))?\s*sec/i);
+  if (sec) return (Number(sec[1]) + (sec[2] ? Number(sec[2]) : Number(sec[1]))) / 2;
+  return 60;
+}
+
+function exerciseSeconds(e: Exercise): number {
+  const workPerSet = e.timed ? 50 : 40; // rough per-set execution
+  return e.sets * workPerSet + Math.max(0, e.sets - 1) * restSeconds(e.rest) + 25; // + transition
+}
+
+export type SessionDuration = {
+  /** Warm-up + Tier A only. */
+  essential: number;
+  /** Warm-up + Tier A + Tier B — the normal session. */
+  normal: number;
+  /** Everything, including Tier C. */
+  all: number;
+};
+
+/**
+ * A rough minutes estimate for a session, split by how far she takes it. Feeds
+ * the pre-session estimate (§11, estimate-only — no guardrail flag). Warm-up is
+ * a flat 5 min; per-set time is deliberately coarse.
+ */
+export function sessionDuration(exercises: Exercise[]): SessionDuration {
+  const WARMUP = 300;
+  let a = 0;
+  let b = 0;
+  let c = 0;
+  for (const e of exercises) {
+    const s = exerciseSeconds(e);
+    const t = e.tier ?? "A";
+    if (t === "A") a += s;
+    else if (t === "B") b += s;
+    else c += s;
+  }
+  const min = (sec: number) => Math.round(sec / 60);
+  return {
+    essential: min(WARMUP + a),
+    normal: min(WARMUP + a + b),
+    all: min(WARMUP + a + b + c),
+  };
+}
+
 /** The next strength session in the rotation after the last one she completed. */
 export function nextStrengthSession(lastCompleted: SessionKey | null): SessionKey {
   if (!lastCompleted) return SESSION_SEQUENCE[0];
