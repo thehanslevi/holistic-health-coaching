@@ -10,6 +10,7 @@ import {
   ROLLING_RULES,
   runTraffic,
   type SessionKey,
+  type Tier,
 } from "@/lib/program";
 import { catalogOf, findExerciseIn } from "@/lib/program-resolve";
 import { applyProgramEdit, getResolvedProgram } from "@/lib/program-server";
@@ -369,15 +370,15 @@ function failed(error: string): string {
 const editProgram = betaTool({
   name: "edit_program",
   description:
-    "Change which exercises are in a session — add one, drop one, or replace one with another. Use this when she asks, and use it on your own judgment when a change is genuinely warranted (a lift is redundant, something is aggravating a joint, a gap is blocking one of her priorities). Read the session with get_program first so you are editing what is actually there. Say what you changed and why in your reply — never make a change silently. Prefer replace over drop when the movement pattern still has a job to do. This is a real edit to the workout she will do tomorrow, so make one deliberate change at a time rather than restructuring a session in a single turn.",
+    "Change the structure of a session — add an exercise, drop one, replace one, adjust an existing one's prescription, or reorder. Use this when she asks, and on your own judgment when a change is genuinely warranted (a lift is redundant, something is aggravating a joint, a gap is blocking a priority, or an existing lift's sets/reps/tier/rest should change). Read the session with get_program first so you are editing what is actually there. Say what you changed and why in your reply — never make a change silently. IMPORTANT — pick the right op: to change an EXISTING lift's sets, rep range, tier, rest, or name, use 'update' (it keeps the lift's id, so its logged history stays attached); use 'replace' only when it becomes a genuinely different movement. To move a working load up or down, use set_exercise_target, not this. Prefer replace over drop when the movement pattern still has a job to do. This is a real edit to the workout she will do tomorrow, so make one deliberate change at a time.",
   inputSchema: {
     type: "object",
     properties: {
       op: {
         type: "string",
-        enum: ["add", "drop", "replace"],
+        enum: ["add", "drop", "replace", "update", "move"],
         description:
-          "'add' puts a new exercise in; 'drop' removes one; 'replace' swaps one out for another, keeping its slot.",
+          "'add' puts a new exercise in; 'drop' removes one; 'replace' swaps one out for a different movement (new id, history not carried); 'update' changes fields on an existing lift IN PLACE (keeps its id and logged history) — use this for sets/reps/tier/rest/name tweaks; 'move' reorders a lift within the session.",
       },
       session_key: {
         type: "string",
@@ -387,41 +388,54 @@ const editProgram = betaTool({
       exercise_id: {
         type: "string",
         description:
-          "For 'drop' and 'replace': the id of the existing exercise being acted on. Ignored for 'add'.",
+          "For 'drop', 'replace', 'update', and 'move': the id of the existing exercise being acted on. Ignored for 'add'.",
       },
       after_exercise_id: {
         type: "string",
         description:
-          "For 'add' only: insert directly after this exercise. Omit to append at the end. Order matters — put heavy compounds before accessories.",
+          "For 'add' and 'move': place the exercise directly after this one. For 'add', omit to append at the end; for 'move', omit to send it to the front. Order matters — put heavy compounds before accessories.",
       },
       name: {
         type: "string",
-        description: "For 'add' and 'replace': the new exercise's name, as she'd say it. e.g. 'Chest-Supported Row'.",
+        description:
+          "For 'add' and 'replace': the new exercise's name, as she'd say it, e.g. 'Chest-Supported Row'. For 'update': a rename (optional).",
       },
-      sets: { type: "integer", description: "For 'add' and 'replace': number of sets." },
+      sets: { type: "integer", description: "For 'add'/'replace': number of sets. For 'update': the new set count (optional)." },
       reps: {
         type: "string",
-        description: "For 'add' and 'replace': rep prescription as text. e.g. '8-10 reps', '12 each side'.",
+        description:
+          "For 'add'/'replace': rep prescription as text, e.g. '8-10 reps', '12 each side'. For 'update': the new rep range (optional).",
       },
       target: {
         type: "string",
         description:
-          "For 'add' and 'replace': starting load or target. e.g. '60 lbs', 'Bodyweight', 'Light band'.",
+          "For 'add'/'replace': starting load or target, e.g. '60 lbs', 'Bodyweight', 'Light band'. For 'update' you normally leave this alone and use set_exercise_target for load; only set it here when changing the baseline prescription itself.",
       },
       note: {
         type: "string",
         description:
-          "For 'add' and 'replace': the coaching note — how to do it and what it's for. This is what she reads mid-set, so make it useful and concrete.",
+          "For 'add'/'replace': the coaching note — how to do it and what it's for; this is what she reads mid-set, so make it concrete. For 'update': the new note (optional; empty string clears it).",
       },
       weighted: {
         type: "boolean",
         description:
-          "For 'add' and 'replace': false for bodyweight/band work with no load field. Defaults to true.",
+          "For 'add'/'replace' (and 'update' if it changes): false for bodyweight/band work with no load field. Defaults to true.",
       },
       timed: {
         type: "boolean",
         description:
-          "For 'add' and 'replace': true if measured in time rather than reps (planks, balance holds). Defaults to false.",
+          "For 'add'/'replace' (and 'update' if it changes): true if measured in time rather than reps (planks, balance holds). Defaults to false.",
+      },
+      tier: {
+        type: "string",
+        enum: ["A", "B", "C"],
+        description:
+          "Priority within the session: A = essential (defines a complete session), B = useful when time/readiness allow, C = optional accessory. For 'add'/'replace', and for 'update' to re-tier an existing lift.",
+      },
+      rest: {
+        type: "string",
+        description:
+          "Prescribed rest between hard sets, e.g. '2.5–3 min', '60–90 sec'. Feeds the session duration estimate. For 'add'/'replace', and for 'update' to change it.",
       },
       rationale: {
         type: "string",
@@ -442,6 +456,32 @@ const editProgram = betaTool({
       return r.ok ? `${r.summary}. She can see this and undo it in her Program screen.` : failed(r.error);
     }
 
+    if (op === "move") {
+      if (!exercise_id) return "move needs the exercise_id of the lift to reorder.";
+      const r = await applyProgramEdit(
+        { op: "move", session_key: key, exercise_id, after_exercise_id: after_exercise_id ?? null },
+        rationale,
+      );
+      return r.ok ? `${r.summary}. She can see this and undo it in her Program screen.` : failed(r.error);
+    }
+
+    if (op === "update") {
+      if (!exercise_id) return "update needs the exercise_id of the lift to change.";
+      // Only the fields actually supplied become changes; the rest are left as-is.
+      const changes: Record<string, unknown> = {};
+      for (const f of ["name", "sets", "reps", "target", "note", "weighted", "timed", "tier", "rest"] as const) {
+        if (args[f] != null) changes[f] = args[f];
+      }
+      if (Object.keys(changes).length === 0) {
+        return "update needs at least one field to change (sets, reps, tier, rest, name, note, etc.).";
+      }
+      const r = await applyProgramEdit(
+        { op: "update", session_key: key, exercise_id, changes },
+        rationale,
+      );
+      return r.ok ? `${r.summary}. She can see this and undo it in her Program screen.` : failed(r.error);
+    }
+
     // add / replace both need a full exercise spec
     const missing = (["name", "sets", "reps", "target"] as const).filter((f) => args[f] == null);
     if (missing.length) return `${op} needs: ${missing.join(", ")}.`;
@@ -454,6 +494,8 @@ const editProgram = betaTool({
       note: args.note,
       weighted: args.weighted,
       timed: args.timed,
+      tier: args.tier as Tier | undefined,
+      rest: args.rest,
     };
 
     if (op === "add") {

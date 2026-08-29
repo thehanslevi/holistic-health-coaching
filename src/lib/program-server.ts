@@ -1,4 +1,4 @@
-import { SESSION_ORDER, type Exercise, type SessionKey } from "@/lib/program";
+import { SESSION_ORDER, type Exercise, type SessionKey, type Tier } from "@/lib/program";
 import {
   catalogOf,
   findExerciseIn,
@@ -80,6 +80,23 @@ type EditOp =
       session_key: SessionKey;
       exercise_id: string;
       exercise: NewExercise;
+    }
+  // In-place field change that KEEPS the exercise id — so reps/load/tier/rest can
+  // move without severing the lift from its logged history. This is the op the
+  // day-to-day "she's earned a bump / retune this" changes should use, not replace.
+  | {
+      op: "update";
+      session_key: SessionKey;
+      exercise_id: string;
+      changes: ExerciseEdit;
+    }
+  // Reorder within a session: place the lift immediately after `after_exercise_id`,
+  // or at the front when omitted (heavy compounds first).
+  | {
+      op: "move";
+      session_key: SessionKey;
+      exercise_id: string;
+      after_exercise_id?: string | null;
     };
 
 export type NewExercise = {
@@ -90,7 +107,25 @@ export type NewExercise = {
   note?: string;
   weighted?: boolean;
   timed?: boolean;
+  tier?: Tier;
+  rest?: string;
 };
+
+/** Fields an in-place update may change. Deliberately excludes `id` — the whole
+ *  point of update over replace is that the lift keeps its identity, so its
+ *  logged history stays attached. Every field is optional; only those provided
+ *  change. */
+export type ExerciseEdit = Partial<{
+  name: string;
+  sets: number;
+  reps: string;
+  target: string;
+  note: string;
+  weighted: boolean;
+  timed: boolean;
+  tier: Tier;
+  rest: string;
+}>;
 
 function buildExercise(sessions: ProgramSessions, key: SessionKey, spec: NewExercise): Exercise {
   return {
@@ -102,7 +137,38 @@ function buildExercise(sessions: ProgramSessions, key: SessionKey, spec: NewExer
     ...(spec.note ? { note: spec.note } : {}),
     ...(spec.weighted === false ? { weighted: false } : {}),
     ...(spec.timed ? { timed: true } : {}),
+    ...(spec.tier ? { tier: spec.tier } : {}),
+    ...(spec.rest ? { rest: spec.rest } : {}),
   };
+}
+
+/** Human-readable "reps 3×10→3×8" style summary of what an update changed, so the
+ *  audit row and her Program screen say something concrete. */
+function describeEdit(before: Exercise, changes: ExerciseEdit): string {
+  const parts: string[] = [];
+  const label: Record<keyof ExerciseEdit, string> = {
+    name: "name",
+    sets: "sets",
+    reps: "reps",
+    target: "load",
+    note: "note",
+    weighted: "weighted",
+    timed: "timed",
+    tier: "tier",
+    rest: "rest",
+  };
+  for (const k of Object.keys(changes) as (keyof ExerciseEdit)[]) {
+    const next = changes[k];
+    if (next === undefined) continue;
+    const prev = (before as Record<string, unknown>)[k];
+    if (prev === next) continue;
+    if (k === "note") {
+      parts.push("note");
+    } else {
+      parts.push(`${label[k]} ${prev ?? "—"}→${next}`);
+    }
+  }
+  return parts.join(", ");
 }
 
 /**
@@ -149,7 +215,7 @@ export async function applyProgramEdit(
     }
     session.exercises.splice(at, 0, ex);
     summary = `Added ${ex.name} to ${edit.session_key}`;
-  } else {
+  } else if (edit.op === "replace") {
     const idx = session.exercises.findIndex((e) => e.id === edit.exercise_id);
     if (idx === -1) {
       return { ok: false, error: notFound(sessions, edit.exercise_id, edit.session_key) };
@@ -158,6 +224,45 @@ export async function applyProgramEdit(
     const ex = buildExercise(sessions, edit.session_key, edit.exercise);
     session.exercises.splice(idx, 1, ex);
     summary = `Replaced ${oldName} with ${ex.name} in ${edit.session_key}`;
+  } else if (edit.op === "update") {
+    const idx = session.exercises.findIndex((e) => e.id === edit.exercise_id);
+    if (idx === -1) {
+      return { ok: false, error: notFound(sessions, edit.exercise_id, edit.session_key) };
+    }
+    const current = session.exercises[idx];
+    const changed = describeEdit(current, edit.changes);
+    if (!changed) {
+      return { ok: false, error: "Nothing to update — those values already match." };
+    }
+    // Merge in place, keeping the id. Undefined fields are dropped so they don't
+    // clobber existing values; note/rest cleared with "" are removed cleanly.
+    const next: Exercise = { ...current };
+    for (const [k, v] of Object.entries(edit.changes)) {
+      if (v === undefined) continue;
+      if ((k === "note" || k === "rest") && v === "") delete (next as Record<string, unknown>)[k];
+      else (next as Record<string, unknown>)[k] = v;
+    }
+    session.exercises.splice(idx, 1, next);
+    summary = `Retuned ${current.name} in ${edit.session_key} (${changed})`;
+  } else {
+    // move
+    const idx = session.exercises.findIndex((e) => e.id === edit.exercise_id);
+    if (idx === -1) {
+      return { ok: false, error: notFound(sessions, edit.exercise_id, edit.session_key) };
+    }
+    const [ex] = session.exercises.splice(idx, 1);
+    let at = 0;
+    if (edit.after_exercise_id) {
+      const i = session.exercises.findIndex((e) => e.id === edit.after_exercise_id);
+      if (i === -1) {
+        // Put it back before failing — we already spliced it out.
+        session.exercises.splice(idx, 0, ex);
+        return { ok: false, error: notFound(sessions, edit.after_exercise_id, edit.session_key) };
+      }
+      at = i + 1;
+    }
+    session.exercises.splice(at, 0, ex);
+    summary = `Moved ${ex.name} ${edit.after_exercise_id ? "later" : "to the front"} in ${edit.session_key}`;
   }
 
   // Audit first: if the snapshot write fails we would rather have a change row
