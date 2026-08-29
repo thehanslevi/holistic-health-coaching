@@ -5,7 +5,10 @@ import type { SessionLogData } from "@/lib/types";
 // on save.
 
 const DRAFT_KEY = "volt_session_draft";
-const DRAFT_MAX_AGE = 18 * 3600 * 1000; // ignore drafts older than 18h
+// A workout is often started one evening and finished the next — an 18h window
+// silently dropped the draft in between, so re-entering re-ran the prescription
+// and reset typed weights to the previous load. 48h covers a return-next-day.
+const DRAFT_MAX_AGE = 48 * 3600 * 1000;
 
 export type SessionDraft = {
   sessionKey: string;

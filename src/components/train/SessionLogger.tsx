@@ -381,20 +381,33 @@ export default function SessionLogger({
   // does not become the suggestion for a high-rep day, and a yellow morning
   // trims what's offered. See lib/prescribe.ts.
   const begin = () => {
-    const prefill: Record<string, SetEntry> = {};
-    for (const ex of session.exercises) {
-      for (let i = 0; i < ex.sets; i++) {
-        const key = `${ex.id}_s${i}`;
-        const { source, ...entry } = prescribeSet({
-          exercise: ex,
-          previous: prev?.data.sets[key],
-          readiness,
-        });
-        void source;
-        if (entry.reps || entry.weight || entry.duration) prefill[key] = entry;
+    setLog((l) => {
+      const next: Record<string, SetEntry> = {};
+      for (const ex of session.exercises) {
+        for (let i = 0; i < ex.sets; i++) {
+          const key = `${ex.id}_s${i}`;
+          // NEVER overwrite a set she's already typed into. Re-entering a session
+          // (e.g. one started yesterday) must keep her logged weights/reps, not
+          // reset them to the prescription's previous-session default.
+          const existing = l.sets[key];
+          if (
+            existing &&
+            (existing.reps || existing.weight || existing.duration || existing.assistWeight)
+          ) {
+            next[key] = existing;
+            continue;
+          }
+          const { source, ...entry } = prescribeSet({
+            exercise: ex,
+            previous: prev?.data.sets[key],
+            readiness,
+          });
+          void source;
+          if (entry.reps || entry.weight || entry.duration) next[key] = entry;
+        }
       }
-    }
-    setLog((l) => ({ ...l, sets: prefill }));
+      return { ...l, sets: next };
+    });
     startedAtRef.current = Date.now();
     setStage({ name: "exercise", idx: 0 });
     setShowNote(false);
