@@ -15,6 +15,7 @@ import { Button, Card, Dots, EmptyState, SectionLabel, inputClass } from "@/comp
 import { BarChart, LineChart } from "@/components/progress/charts";
 import { useApp } from "@/components/AppShell";
 import ShareWeek from "@/components/ShareWeek";
+import RecalibrationCard from "@/components/progress/RecalibrationCard";
 import ExportData from "@/components/ExportData";
 
 function WeekReview() {
@@ -107,6 +108,8 @@ export default function ProgressView() {
           </div>
         </div>
       )}
+
+      {!nothingYet && <RecalibrationCard />}
 
       {!nothingYet && <WeekReview />}
 
