@@ -269,12 +269,14 @@ export async function POST(req: NextRequest) {
     // tracking (→ hrl_cycle) from the same payload.
     const hae = body?.data;
     if (hae && typeof hae === "object") {
+      // The native shell sends the same nested shape and names itself.
+      const source = typeof body?.source === "string" && body.source ? String(body.source).slice(0, 40) : "health-auto-export";
       let healthCount = 0;
       let healthDates: string[] = [];
       if (Array.isArray(hae.metrics)) {
         const byDate = parseHaeMetrics(hae.metrics);
         const rows = [...byDate.entries()]
-          .map(([date, agg]) => rowFromAgg(date, agg, "health-auto-export"))
+          .map(([date, agg]) => rowFromAgg(date, agg, source))
           .filter((r) => NUM_FIELDS.some((f) => r[f] != null));
         if (rows.length) {
           const { error } = await db.from("hrl_health").upsert(rows, { onConflict: "date" });
@@ -301,7 +303,7 @@ export async function POST(req: NextRequest) {
           {
             status: 200,
             ok: true,
-            source: "health-auto-export",
+            source,
             health_count: healthCount,
             health_dates: healthDates,
             cycle_count: cycleRows.length,
