@@ -77,6 +77,11 @@ export function guardBrief(text: string, context: string, readiness: string | nu
     v.push({ rule: "skip-without-low-readiness", detail: `readiness=${readiness ?? "none"}` });
   }
 
+  // "3×10, 12" — a rep RANGE rendered as a list (the voice pass used to do this).
+  // Ambiguous on a lock screen; must read "3×10-12".
+  const garbled = t.match(/\d\s*[×x]\s*\d{1,2},\s*\d{1,2}\b/);
+  if (garbled) v.push({ rule: "garbled-range", detail: `"${garbled[0]}"` });
+
   const wd = t.match(WEEKDAYS);
   if (wd) v.push({ rule: "weekday", detail: `"${wd[0]}"` });
 
