@@ -217,13 +217,50 @@ function rowFromAgg(date: string, agg: DayAgg, source: string) {
   return row;
 }
 
+// Record every inbound attempt — accepted or rejected — so a stalled sync can be
+// diagnosed from the app ("phone last tried at…") instead of guessed at. Never
+// throws: a logging failure must not turn a good sync into a bad one.
+type SyncEvent = {
+  status: number;
+  ok: boolean;
+  source?: string | null;
+  health_count?: number;
+  health_dates?: string[];
+  cycle_count?: number;
+  error?: string | null;
+};
+async function recordSync(req: NextRequest, ev: SyncEvent, bytes: number | null) {
+  try {
+    await supabase()
+      .from("hrl_sync_events")
+      .insert({
+        endpoint: "/api/health",
+        status: ev.status,
+        ok: ev.ok,
+        source: ev.source ?? null,
+        health_count: ev.health_count ?? 0,
+        health_dates: ev.health_dates ?? [],
+        cycle_count: ev.cycle_count ?? 0,
+        error: ev.error ?? null,
+        user_agent: req.headers.get("user-agent")?.slice(0, 200) ?? null,
+        bytes,
+      });
+  } catch {
+    /* observability only */
+  }
+}
+
 // Upsert Apple Health metrics. Accepts EITHER:
 //  1. Health Auto Export's nested payload: { data: { metrics: [...] } }  (preferred)
 //  2. A flat single-day body: { date?, sleep_hours, steps, resting_hr, hrv, active_energy }
 // Only fields present are written, so partial pushes are safe.
 export async function POST(req: NextRequest) {
+  const bytes = Number(req.headers.get("content-length")) || null;
   const unauthorized = checkAuth(req);
-  if (unauthorized) return unauthorized;
+  if (unauthorized) {
+    await recordSync(req, { status: 401, ok: false, error: "unauthorized" }, bytes);
+    return unauthorized;
+  }
   try {
     const body = await req.json();
     const db = supabase();
@@ -259,6 +296,18 @@ export async function POST(req: NextRequest) {
       }
 
       if (Array.isArray(hae.metrics) || Array.isArray(hae.cycleTracking)) {
+        await recordSync(
+          req,
+          {
+            status: 200,
+            ok: true,
+            source: "health-auto-export",
+            health_count: healthCount,
+            health_dates: healthDates,
+            cycle_count: cycleRows.length,
+          },
+          bytes,
+        );
         return NextResponse.json({
           ok: true,
           health: { upserted: healthCount, dates: healthDates },
@@ -289,8 +338,18 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
     if (error) throw new Error(error.message);
+    await recordSync(
+      req,
+      { status: 200, ok: true, source: String(row.source), health_count: 1, health_dates: [date] },
+      bytes,
+    );
     return NextResponse.json(data);
   } catch (e) {
+    await recordSync(
+      req,
+      { status: 500, ok: false, error: e instanceof Error ? e.message.slice(0, 300) : String(e) },
+      bytes,
+    );
     return errorResponse(e);
   }
 }

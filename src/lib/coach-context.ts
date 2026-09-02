@@ -287,7 +287,7 @@ export async function buildCoachCore(): Promise<string> {
       .join("\n");
     lines.push(
       "",
-      `NEXT STRENGTH SESSION IN THE ROTATION: ${nextKey} — ${nextSession.label} (${nextSession.subtitle}). These are THIS session's prescribed loads — the authoritative plan for it:\n${list}\nWhen you name a weight or rep count for this session, take it from HERE. NEVER carry a load or rep count from a different session or rep range into it — each lift is session-specific (the L1 RDL is a ~strength load for 5–7 reps; the L2 RDL is a ~hypertrophy load for 10–12 reps — different lifts at different weights, do not conflate). Tier A is the essential core; B is useful; C is optional and never required to finish the session.`,
+      `NEXT STRENGTH SESSION IN THE ROTATION: ${nextKey} — ${nextSession.label} (${nextSession.subtitle}). These are THIS session's prescribed loads — the authoritative plan for it:\n${list}\nWhen you name a weight or rep count for this session, take it from HERE. NEVER carry a load or rep count from a different session or rep range into it — each lift is session-specific (the L1 RDL is a ~strength load for 5–7 reps; the L2 RDL is a ~hypertrophy load for 10–12 reps — different lifts at different weights, do not conflate). Tier A is the essential core; B is useful; C is optional. The tiers exist so SHE can decide what to cut on a bad day — they are not a cue for you. Do not tell her to skip, trim, or reorder exercises "if you run out of time": you do not know her schedule, and this session fits comfortably in a normal gym visit. Only suggest trimming to Tier A when her own readiness check-in is Low, and say it's because of readiness, not time.`,
     );
   }
 

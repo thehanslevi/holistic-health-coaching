@@ -68,6 +68,20 @@ function shortDate(iso: string): string {
   return `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
+// "Sep 2, 3:10 AM" for a sync attempt timestamp — local time, so it reads
+// against her own clock.
+function shortWhen(ts: string): string {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return ts;
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}, ${time}`;
+}
+
+type SyncStatus = {
+  last_attempt: { created_at: string; status: number; ok: boolean; error: string | null } | null;
+  last_success: { created_at: string; health_dates: string[] } | null;
+};
+
 function PendingRunCard({ run }: { run: PendingRun }) {
   const { refreshLogs } = useApp();
   const [amKnee, setAmKnee] = useState("");
@@ -135,6 +149,7 @@ export default function TodayView() {
   const [briefLoading, setBriefLoading] = useState(false);
   const [calOpen, setCalOpen] = useState(false);
   const [health, setHealth] = useState<HealthRow[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
 
   const now = new Date();
   const today = todayISO();
@@ -190,7 +205,13 @@ export default function TodayView() {
   // is exactly when a fresh HAE push may have landed. So returning to the app
   // surfaces new numbers on its own, no button, no false promise.
   const loadHealth = useCallback(
-    () => api<HealthRow[]>("/api/health").then(setHealth).catch(() => {}),
+    () =>
+      Promise.all([
+        api<HealthRow[]>("/api/health").then(setHealth),
+        // When the phone last reached us at all — so a stall reads as "the phone
+        // hasn't tried" vs "it tried and failed", which need different fixes.
+        api<SyncStatus>("/api/health/sync-status").then(setSyncStatus),
+      ]).catch(() => {}),
     [],
   );
   useEffect(() => {
@@ -361,6 +382,14 @@ export default function TodayView() {
               {hasHealth && health.stale && latestHealth?.date ? (
                 <div className="text-[10px] text-hold mt-1.5">
                   Sync stalled · from {shortDate(latestHealth.date)} ({health.ageDays}d)
+                  {syncStatus?.last_attempt ? (
+                    <span className="text-faint">
+                      {" "}· phone last reached the app {shortWhen(syncStatus.last_attempt.created_at)}
+                      {!syncStatus.last_attempt.ok ? ` (rejected: ${syncStatus.last_attempt.error ?? syncStatus.last_attempt.status})` : ""}
+                    </span>
+                  ) : syncStatus ? (
+                    <span className="text-faint"> · phone hasn&apos;t reached the app since logging began</span>
+                  ) : null}
                 </div>
               ) : hasHealth && !healthIsToday && latestHealth?.date ? (
                 <div className="text-[10px] text-faint mt-1.5">from {shortDate(latestHealth.date)}</div>
