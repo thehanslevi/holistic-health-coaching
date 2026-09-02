@@ -1,25 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SupabaseConfigError } from "@/lib/supabase";
 
-// Single-user passcode auth. The app client sends `Authorization: Bearer
-// <APP_PASSCODE>`; the iOS Health shortcut can instead pass `?key=<APP_PASSCODE>`
-// in the URL (same secret) so it needs no custom headers.
-
-export function checkAuth(req: NextRequest): NextResponse | null {
-  const expected = process.env.APP_PASSCODE;
-  if (!expected) {
-    return NextResponse.json(
-      { error: "APP_PASSCODE is not set on the server." },
-      { status: 500 },
-    );
-  }
-  const header = req.headers.get("authorization") ?? "";
-  const headerToken = header.replace(/^Bearer\s+/i, "");
-  const queryToken = req.nextUrl.searchParams.get("key") ?? "";
-  const token = headerToken || queryToken;
-  if (token !== expected) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+// No auth. Hannah removed the passcode gate on 2026-09-02 — she's the only
+// user, and she'd rather the app be openly reachable than type a code. Kept as
+// a function so every route keeps its `checkAuth` call site: if a gate ever
+// comes back, this is the one place it goes. The cron routes carry their own
+// CRON_SECRET check and are unaffected.
+export function checkAuth(_req: NextRequest): NextResponse | null {
+  void _req;
   return null;
 }
 

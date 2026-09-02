@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { getPasscode } from "@/lib/client";
 
 // Records mic audio and transcribes it via /api/transcribe (Whisper). Used for
 // hands-free coach input. MediaRecorder works in the installed iOS PWA
@@ -32,7 +31,6 @@ export function useVoiceRecorder(onText: (text: string) => void) {
           fd.append("file", blob, "audio.webm");
           const res = await fetch("/api/transcribe", {
             method: "POST",
-            headers: { Authorization: `Bearer ${getPasscode() ?? ""}` },
             body: fd,
           });
           const data = await res.json();

@@ -8,10 +8,9 @@ import {
   useMemo,
   useState,
 } from "react";
-import { api, ApiError, clearPasscode, getPasscode, setPasscode } from "@/lib/client";
+import { api } from "@/lib/client";
 import { resolveProgram, type ProgramSessions } from "@/lib/program-resolve";
 import type { LogRow, Phase, ProgramOverride } from "@/lib/types";
-import { Button, inputClass } from "@/components/ui";
 import TodayView from "@/components/today/TodayView";
 import TrainView from "@/components/train/TrainView";
 import ProgressView from "@/components/progress/ProgressView";
@@ -51,7 +50,6 @@ type AppContextValue = {
   // that renders exercises must read this, never SESSIONS directly — otherwise
   // the coach swaps a lift and her logger keeps showing the old one.
   sessions: ProgramSessions;
-  lock: () => void;
 };
 
 export type TrainIntent =
@@ -65,61 +63,6 @@ export function useApp() {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error("useApp outside AppShell");
   return ctx;
-}
-
-// ─── Passcode gate ────────────────────────────────────────────────────────────
-
-function PasscodeGate({ onUnlock }: { onUnlock: (code: string) => void }) {
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
-
-  const submit = async () => {
-    if (!code.trim() || checking) return;
-    setChecking(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/checkins?probe=1", {
-        headers: { Authorization: `Bearer ${code.trim()}` },
-      });
-      if (res.status === 401) {
-        setError("Wrong passcode.");
-        return;
-      }
-      if (!res.ok) {
-        setError(`Server error (${res.status}). Check the setup.`);
-        return;
-      }
-      onUnlock(code.trim());
-    } catch {
-      setError("Could not reach the server.");
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  return (
-    <div className="min-h-dvh flex items-center justify-center px-6">
-      <div className="w-full max-w-xs text-center fade-up">
-        <div className="display-i text-5xl text-ink">Volt</div>
-        <div className="label mt-2 mb-8">Train · Recover · Coach</div>
-        <input
-          type="password"
-          inputMode="numeric"
-          autoFocus
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="Passcode"
-          className={`${inputClass} text-center num text-lg tracking-[0.3em]`}
-        />
-        {error && <div className="text-xs text-stop mt-3">{error}</div>}
-        <Button size="lg" className="mt-4" onClick={submit} disabled={checking || !code.trim()}>
-          {checking ? "Checking…" : "Unlock"}
-        </Button>
-      </div>
-    </div>
-  );
 }
 
 // ─── Bottom navigation ────────────────────────────────────────────────────────
@@ -156,7 +99,6 @@ function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
 export default function AppShell() {
-  const [unlocked, setUnlocked] = useState<boolean | null>(null); // null = not hydrated yet
   const [tab, setTab] = useState<Tab>("today");
   const [coachDraft, setCoachDraft] = useState<string | null>(null);
   const [trainIntent, setTrainIntent] = useState<TrainIntent | null>(null);
@@ -171,10 +113,6 @@ export default function AppShell() {
     () => resolveProgram(activePhase?.program_snapshot ?? null, overrides),
     [activePhase?.program_snapshot, overrides],
   );
-
-  useEffect(() => {
-    setUnlocked(!!getPasscode());
-  }, []);
 
   // iOS keeps an installed PWA suspended and resumes it WITHOUT reloading, which
   // froze the whole view on an old day — stale date, stale counts, and an old
@@ -206,11 +144,8 @@ export default function AppShell() {
     try {
       const rows = await api<LogRow[]>("/api/logs");
       setLogs(rows);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 401) {
-        clearPasscode();
-        setUnlocked(false);
-      }
+    } catch {
+      /* transient; the next foreground refresh retries */
     } finally {
       setLogsLoading(false);
     }
@@ -235,12 +170,10 @@ export default function AppShell() {
   }, []);
 
   useEffect(() => {
-    if (unlocked) {
-      refreshLogs();
-      refreshOverrides();
-      refreshPhase();
-    }
-  }, [unlocked, refreshLogs, refreshOverrides, refreshPhase]);
+    refreshLogs();
+    refreshOverrides();
+    refreshPhase();
+  }, [refreshLogs, refreshOverrides, refreshPhase]);
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -301,26 +234,9 @@ export default function AppShell() {
       activePhase,
       refreshPhase,
       sessions,
-      lock: () => {
-        clearPasscode();
-        setUnlocked(false);
-      },
     }),
     [tab, coachDraft, trainIntent, logs, logsLoading, refreshLogs, refreshOverrides, overrides, activePhase, refreshPhase, sessions],
   );
-
-  if (unlocked === null) return null;
-
-  if (!unlocked) {
-    return (
-      <PasscodeGate
-        onUnlock={(code) => {
-          setPasscode(code);
-          setUnlocked(true);
-        }}
-      />
-    );
-  }
 
   return (
     <AppContext.Provider value={value}>

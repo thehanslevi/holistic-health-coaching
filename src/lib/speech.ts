@@ -3,7 +3,6 @@
 // autoplay rules), and falls back to the browser's built-in SpeechSynthesis
 // when TTS isn't configured.
 
-import { getPasscode } from "@/lib/client";
 
 // A tiny silent clip used to "unlock" audio playback inside a user gesture on iOS.
 const SILENT =
@@ -68,7 +67,6 @@ async function speakNeural(text: string, onEnd?: () => void): Promise<boolean> {
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${getPasscode() ?? ""}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ text }),

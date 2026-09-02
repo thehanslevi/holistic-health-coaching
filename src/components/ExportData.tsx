@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { getPasscode } from "@/lib/client";
 
 // Take your training with you.
 //
@@ -41,9 +40,7 @@ export default function ExportData() {
     setBusy(fmt);
     setStatus("loading");
     try {
-      const res = await fetch(`/api/export?format=${fmt}`, {
-        headers: { Authorization: `Bearer ${getPasscode() ?? ""}` },
-      });
+      const res = await fetch(`/api/export?format=${fmt}`);
       if (!res.ok) throw new Error(String(res.status));
 
       const blob = await res.blob();

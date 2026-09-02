@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, getPasscode } from "@/lib/client";
+import { api } from "@/lib/client";
 import type {
   ChatMessage,
   CoachContextSummary,
@@ -145,10 +145,7 @@ export default function CoachView() {
     try {
       const res = await fetch("/api/coach", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getPasscode() ?? ""}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId: convId, message: messageText }),
         signal: controller.signal,
       });

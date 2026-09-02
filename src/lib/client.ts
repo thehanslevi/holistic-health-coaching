@@ -1,19 +1,5 @@
-// Client-side API helper: every request carries the passcode as a bearer token.
-
-const PASSCODE_KEY = "hrl_passcode";
-
-export function getPasscode(): string | null {
-  if (typeof localStorage === "undefined") return null;
-  return localStorage.getItem(PASSCODE_KEY);
-}
-
-export function setPasscode(code: string) {
-  localStorage.setItem(PASSCODE_KEY, code);
-}
-
-export function clearPasscode() {
-  localStorage.removeItem(PASSCODE_KEY);
-}
+// Client-side API helper. No auth header: the passcode gate was removed
+// 2026-09-02 (single user; she'd rather it be openly reachable).
 
 export class ApiError extends Error {
   status: number;
@@ -39,7 +25,6 @@ export async function apiRaw(
     ...options,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${getPasscode() ?? ""}`,
       ...options.headers,
     },
   });
