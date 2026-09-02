@@ -48,7 +48,21 @@ function judgeContext(context: string): string {
   return context.length > 9000 ? context.slice(0, 9000) + "\n…[truncated]" : context;
 }
 
-export async function judgeBrief(content: string, context: string, readiness: string | null): Promise<Judge> {
+type Lookup = { name: string; input: unknown; result?: string };
+
+function lookupsBlock(lookups: Lookup[] | undefined): string {
+  if (!lookups?.length) return "(the coach made no lookups, or their results were not recorded — treat log-history claims as unverifiable, not as invented)";
+  return lookups
+    .map((l, i) => `[${i + 1}] ${l.name}(${JSON.stringify(l.input)})\n${l.result ? l.result.slice(0, 2500) : "(result not recorded)"}`)
+    .join("\n\n");
+}
+
+export async function judgeBrief(
+  content: string,
+  context: string,
+  readiness: string | null,
+  lookups?: Lookup[],
+): Promise<Judge> {
   const client = new Anthropic();
   const res = await client.messages.create({
     model: JUDGE_MODEL,
@@ -57,7 +71,7 @@ export async function judgeBrief(content: string, context: string, readiness: st
     messages: [
       {
         role: "user",
-        content: `READINESS CHECK-IN: ${readiness ?? "none"}\n\nCONTEXT THE BRIEF WAS WRITTEN FROM:\n${judgeContext(context)}\n\nBRIEF:\n"${content}"\n\nReturn JSON only.`,
+        content: `READINESS CHECK-IN: ${readiness ?? "none"}\n\nCONTEXT THE BRIEF WAS WRITTEN FROM:\n${judgeContext(context)}\n\nWHAT THE COACH LOOKED UP BEFORE WRITING (tool calls and their results — a claim supported here IS grounded, even if the context block above doesn't mention it; a load bump justified by logged top-of-range reps here is a legitimate progression call):\n${lookupsBlock(lookups)}\n\nBRIEF:\n"${content}"\n\nReturn JSON only.`,
       },
     ],
   });
@@ -104,12 +118,17 @@ async function record(db: SupabaseClient, r: EvalResult, model: string | null) {
 /** Judge one stored brief row (no regeneration). */
 export async function evalBriefRow(
   db: SupabaseClient,
-  row: { brief_date: string; readiness: string | null; content: string; inputs: { context?: string; model?: string } | null },
+  row: {
+    brief_date: string;
+    readiness: string | null;
+    content: string;
+    inputs: { context?: string; model?: string; lookups?: Lookup[] } | null;
+  },
   persist = true,
 ): Promise<EvalResult> {
   const context = row.inputs?.context ?? "";
   const violations = guardBrief(row.content, context, row.readiness);
-  const judge = await judgeBrief(row.content, context, row.readiness);
+  const judge = await judgeBrief(row.content, context, row.readiness, row.inputs?.lookups);
   const r: EvalResult = {
     surface: "brief",
     subject_date: row.brief_date,

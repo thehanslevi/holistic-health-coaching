@@ -43,3 +43,13 @@ next-env.d.ts
 # Personal / private content (kept local, never published)
 private/
 coach-prompt.local.md
+
+# iOS shell (Capacitor) — generated artifacts
+ios/App/Pods/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+ios/DerivedData/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/

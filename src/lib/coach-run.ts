@@ -28,8 +28,9 @@ export type CoachRun = {
   text: string;
   /** Everything it was told before it did anything. */
   context: string;
-  /** What it went and read, in the order it read it. */
-  lookups: { name: string; input: unknown }[];
+  /** What it went and read, in the order it read it — and what came back
+   *  (truncated), so a judge can verify a claim against the same evidence. */
+  lookups: { name: string; input: unknown; result?: string }[];
   model: string;
   generated_at: string;
 };
@@ -55,12 +56,29 @@ export async function runCoach({
   const core = await buildCoachCore();
   const context = extraContext ? `${core}\n\n${extraContext}` : core;
 
+  // Wrap each tool's run so its RESULT is captured alongside the call. The
+  // runner only yields assistant messages, so this is the one place the
+  // evidence the coach actually read can be recorded for "why did it say that?"
+  // and for the eval judge (which otherwise calls every log-based claim invented).
+  const lookups: { name: string; input: unknown; result?: string }[] = [];
+  type Runnable = { name: string; run: (input: never) => unknown };
+  const wrapped = (tools as readonly Runnable[]).map((t) => ({
+    ...t,
+    run: async (input: never) => {
+      const entry: { name: string; input: unknown; result?: string } = { name: t.name, input };
+      lookups.push(entry);
+      const out = await t.run(input);
+      entry.result = typeof out === "string" ? out.slice(0, 4000) : JSON.stringify(out)?.slice(0, 4000);
+      return out;
+    },
+  })) as unknown as CoachToolset;
+
   const runner = client.beta.messages.toolRunner({
     model: MODEL,
     max_tokens: maxTokens,
     thinking: { type: "adaptive" },
     output_config: { effort: "high" },
-    tools,
+    tools: wrapped,
     max_iterations: 12,
     system: [
       {
@@ -75,16 +93,11 @@ export async function runCoach({
     messages: [{ role: "user", content: prompt }],
   });
 
-  // Iterated rather than awaited so the lookups can be captured on the way past.
-  // Iteration ends when the coach stops calling tools, and the last message it
-  // yields is the final answer.
-  const lookups: { name: string; input: unknown }[] = [];
+  // Iterated rather than awaited so a server-tool pause can be resumed. Iteration
+  // ends when the coach stops calling tools; the last message is the answer.
   let final: Anthropic.Beta.BetaMessage | undefined;
   for await (const message of runner) {
     final = message;
-    for (const block of message.content) {
-      if (block.type === "tool_use") lookups.push({ name: block.name, input: block.input });
-    }
     // The runner doesn't auto-resume a server-tool pause; push it back to finish.
     if (message.stop_reason === "pause_turn") {
       runner.pushMessages({ role: "assistant", content: message.content });

@@ -21,7 +21,10 @@ export type BriefInputs = {
   generated_at: string;
   model: string;
   context: string;
-  lookups: { name: string; input: unknown }[];
+  /** What the coach looked up, with what came back (truncated) — so a judge can
+   *  verify a claim like "3×12 three sessions running" instead of calling it
+   *  invented because it isn't in the summary block. */
+  lookups: { name: string; input: unknown; result?: string }[];
   /** What the guard caught on the first draft (empty = clean first time), and
    *  whether a second draft was needed. Kept so the eval harness can see how
    *  often the model needs correcting, per rule. */
