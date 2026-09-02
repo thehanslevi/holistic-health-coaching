@@ -3,6 +3,7 @@ import { COACH_UNATTENDED_TOOLS } from "@/lib/coach-tools";
 import { supabase } from "@/lib/supabase";
 import { todayISO } from "@/lib/day";
 import { rewriteInVoice } from "@/lib/voice";
+import { guardBrief, violationsSummary, type Violation } from "@/lib/brief-guard";
 
 /** Full weekday name for a YYYY-MM-DD date. Anchored at noon UTC so the calendar
  *  day is stable regardless of where the code runs. */
@@ -21,6 +22,10 @@ export type BriefInputs = {
   model: string;
   context: string;
   lookups: { name: string; input: unknown }[];
+  /** What the guard caught on the first draft (empty = clean first time), and
+   *  whether a second draft was needed. Kept so the eval harness can see how
+   *  often the model needs correcting, per rule. */
+  guard?: { first_draft_violations: Violation[]; retried: boolean; final_violations: Violation[] };
 };
 
 export async function getOrCreateDailyBrief(forceRefresh = false): Promise<{
@@ -45,16 +50,13 @@ export async function getOrCreateDailyBrief(forceRefresh = false): Promise<{
 
   // Same model, thinking, and tools as the chat coach — it goes and looks before
   // it writes, instead of paraphrasing a digest someone else pre-chewed for it.
-  const run = await runCoach({
-    tools: COACH_UNATTENDED_TOOLS,
-    maxTokens: 8000,
-    prompt: `Write my morning brief for today (${today_weekday}). My readiness check-in today: ${readiness ?? "not recorded yet"}.
+  const briefPrompt = `Write my morning brief for today (${today_weekday}). My readiness check-in today: ${readiness ?? "not recorded yet"}.
 
 There is NO fixed weekday schedule. Recommend today's session from the rolling rotation and how I'm actually recovering — never from what day of the week it is. Go look before you decide: what I've actually completed in the last several days (so you know where I am in the strength rotation and whether I've stacked hard days), how my knee and ankle answered the last thing that loaded them, my recovery against my own baseline, and any open decision of yours that's now due. get_program gives you the rotation, the ~7–10 day cycle targets, and the sequencing rules. Two or three lookups is normal. Do not write this from the summary alone.
 
 TODAY'S OVERNIGHT NUMBERS ARE NOT REAL YET. It is early; Apple Health is still consolidating last night. Sleep in particular often shows as a partial block right now and will be two or three times higher by lunchtime, and same-day HRV and resting HR swing as more samples land. get_health_series marks today's row PROVISIONAL and gives you the settled readings separately — use those. NEVER quote a specific same-day sleep, HRV, or resting-HR figure, and never build the day's call on one; you have said "you slept three hours" off a number that was eight by noon. If you need a recovery read this morning, use my readiness check-in (I logged it myself) and the trend of settled days, and speak in direction ("last night ran short", "HRV's been low this week"), not a number.
 
-If a decision of yours is due or overtaken, close it (close_decision) and let that drive today's line. If today's call is one you'll want to hold me to for more than today, record it (record_decision).
+If a decision of yours is due or overtaken, close it (close_decision) and let that drive today's line. If today's call is one you'll want to hold me to for more than today, record it (record_decision). The brief must be consistent with your open decisions — you have told me to drop pull-up assist while your own standing decision said to wait for one more clean session. Never contradict one; change it first or honor it.
 
 Then write the brief itself.
 
@@ -71,11 +73,34 @@ WHAT THE BRIEF MUST DO — give me information I'd act on, not encouragement:
 - Name the actual session (e.g. "L2 lower today", "easy Zone 2 today"), never a weekday.
 - Saturday defaults to recovery unless I've clearly chosen to train; don't assume Sunday is rest — I often resume then.
 
-Plain text only. No preamble, no headers, no lists. Return only the brief — nothing about what you looked up. Obey the voice and banned-word rules in your instructions.`,
-  });
+Plain text only. No preamble, no headers, no lists. Return only the brief — nothing about what you looked up. Obey the voice and banned-word rules in your instructions.`;
+
+  let run = await runCoach({ tools: COACH_UNATTENDED_TOOLS, maxTokens: 8000, prompt: briefPrompt });
+
+  // Guard before anything is saved. The prompt says "never"; this is what makes
+  // it true. One retry with the violations named — a second miss is stored as-is
+  // (with the violations) so the eval harness sees it, rather than looping.
+  const first = guardBrief(run.text, run.context, readiness);
+  let retried = false;
+  if (first.length) {
+    retried = true;
+    run = await runCoach({
+      tools: COACH_UNATTENDED_TOOLS,
+      maxTokens: 8000,
+      prompt: `${briefPrompt}
+
+YOUR PREVIOUS DRAFT WAS REJECTED. It read: "${run.text}"
+It broke these rules: ${violationsSummary(first)}.
+Write it again without those errors. Same brief, same constraints, corrected.`,
+    });
+  }
+  const final = guardBrief(run.text, run.context, readiness);
+  const guard = { first_draft_violations: first, retried, final_violations: final };
+
   // Voice gate: the brief lands on her lock screen, so it's the surface where a
   // single AI-ism is most glaring. Rewrite to coach voice, holding the 40-word cap.
   const content = await rewriteInVoice(run.text, { maxWords: 40 });
+  const inputs: BriefInputs = { generated_at: run.generated_at, model: run.model, context: run.context, lookups: run.lookups, guard };
   if (content) {
     await db.from("hrl_briefs").upsert(
       {
@@ -84,14 +109,10 @@ Plain text only. No preamble, no headers, no lists. Return only the brief — no
         readiness,
         content,
         // What it saw, so "why did it say that?" is answerable later.
-        inputs: { generated_at: run.generated_at, model: run.model, context: run.context, lookups: run.lookups },
+        inputs,
       },
       { onConflict: "brief_date,kind" },
     );
   }
-  return {
-    content,
-    cached: false,
-    inputs: { generated_at: run.generated_at, model: run.model, context: run.context, lookups: run.lookups },
-  };
+  return { content, cached: false, inputs };
 }

@@ -78,7 +78,11 @@ export function lintVoice(text: string): { text: string; hits: string[] } {
   const hits: string[] = [];
   let out = text;
 
-  // Em/en dash → comma (spaced) or nothing (unspaced compound). No em-dashes.
+  // Numeric ranges keep a plain hyphen ("3×10-12", "30-40 min") — turning the
+  // en-dash into a comma made "10–12 reps" read as two rep targets, which is a
+  // wrong prescription on her lock screen, not a style nit.
+  out = out.replace(/(\d)\s*[–—]\s*(\d)/g, "$1-$2");
+  // Everything else: em/en dash → comma (spaced) or nothing (unspaced compound).
   out = out.replace(/\s+[—–]\s+/g, ", ").replace(/[—–]/g, ", ");
   // Strip emojis.
   out = out.replace(EMOJI_RE, "");
@@ -113,7 +117,7 @@ HARD RULES:
 - No hedging and no meta about data. Never mention logs, windows, "from what I can see," or "based on your recent data."
 - Name the real thing: the body part, the weight, the day. "Your right ankle was sore both mornings after last week's run."
 - Lead with the instruction or the observation, then stop. Do not pad. Vary sentence length so it doesn't sound metronomic.
-- No emojis. No em-dashes or en-dashes; use a comma, period, or a new sentence.
+- No emojis. No em-dashes or en-dashes; use a comma, period, or a new sentence. The one exception: numeric ranges keep a hyphen exactly as written ("3×10-12 @ 95", "30-40 min") — never turn a rep range into a list.
 - Praise only a real, specific thing she did, or none at all.
 
 Output ONLY the rewritten message. No preamble, no notes, no quotation marks around it.`;
