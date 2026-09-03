@@ -7,10 +7,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // HealthKit: ask once, register background delivery, sync. Runs even when
-        // iOS launches us in the background for a HealthKit observer wake.
-        HealthSync.shared.start()
+        // HealthKit: ask once, register background delivery, sync — but only
+        // after the web view has finished its first load. The system permission
+        // sheet blocks WebKit's network process from even launching, so asking
+        // at launch meant a sheet over a black screen (and ~12s of nothing on a
+        // simulator where no one taps). Poll the bridge's web view; give up
+        // waiting after 20s and ask anyway (a background observer wake has no
+        // web view to wait for).
+        startHealthWhenLoaded(attempt: 0)
         return true
+    }
+
+    private func startHealthWhenLoaded(attempt: Int) {
+        let bridgeVC = window?.rootViewController as? CAPBridgeViewController
+        let loaded = bridgeVC?.webView.map { !$0.isLoading && $0.url != nil } ?? false
+        if loaded || attempt >= 40 {
+            HealthSync.shared.start()
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.startHealthWhenLoaded(attempt: attempt + 1)
+        }
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

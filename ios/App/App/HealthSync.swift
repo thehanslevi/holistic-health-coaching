@@ -57,12 +57,29 @@ final class HealthSync {
 
   // MARK: - Sync
 
+  private var inFlight = false
+  private var lastSyncAt: Date?
+  private var waiters: [() -> Void] = []
+
+  /// Coalesced: six observers register at once and each fires its initial
+  /// callback, and a foreground follows a launch — without this the same
+  /// 7-day payload posted five times in 100ms. One sync at a time; callers
+  /// arriving while one runs share its completion; a sync that finished in the
+  /// last 20s is not repeated (the observer's completion is still honored).
   func syncAll(reason: String, done: @escaping () -> Void) {
     queue.async {
+      if self.inFlight { self.waiters.append(done); return }
+      if let t = self.lastSyncAt, Date().timeIntervalSince(t) < 20 { done(); return }
+      self.inFlight = true
       let group = DispatchGroup()
       group.enter(); self.syncMetrics { group.leave() }
       group.enter(); self.syncWorkouts { group.leave() }
-      group.notify(queue: self.queue) { done() }
+      group.notify(queue: self.queue) {
+        self.inFlight = false
+        self.lastSyncAt = Date()
+        let ws = self.waiters; self.waiters = []
+        done(); ws.forEach { $0() }
+      }
     }
   }
 
@@ -121,7 +138,10 @@ final class HealthSync {
       store.execute(q)
     }
 
-    // Sleep: asleep stages only, credited to the day you woke up.
+    // Sleep: asleep stages only, as a UNION of intervals. The Watch writes
+    // core/deep/REM segments and the phone (or a third-party app) writes its own
+    // overlapping samples — summing them all produced 18-hour nights. Merge
+    // overlaps, then credit each merged block to the day it ends (wake day).
     group.enter()
     let sq = HKSampleQuery(sampleType: sleep, predicate: HKQuery.predicateForSamples(withStart: start, end: end), limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
       let asleep: Set<Int> = [
@@ -130,8 +150,20 @@ final class HealthSync {
         HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
         HKCategoryValueSleepAnalysis.asleepREM.rawValue,
       ]
-      for s in (samples as? [HKCategorySample]) ?? [] where asleep.contains(s.value) {
-        upd(day(s.endDate)) { $0.sleepSeconds += s.endDate.timeIntervalSince(s.startDate) }
+      var ivs: [(Date, Date)] = ((samples as? [HKCategorySample]) ?? [])
+        .filter { asleep.contains($0.value) }
+        .map { ($0.startDate, $0.endDate) }
+      ivs.sort { $0.0 < $1.0 }
+      var merged: [(Date, Date)] = []
+      for iv in ivs {
+        if let last = merged.last, iv.0 <= last.1 {
+          merged[merged.count - 1].1 = max(last.1, iv.1)
+        } else {
+          merged.append(iv)
+        }
+      }
+      for m in merged {
+        upd(day(m.1)) { $0.sleepSeconds += m.1.timeIntervalSince(m.0) }
       }
       group.leave()
     }
