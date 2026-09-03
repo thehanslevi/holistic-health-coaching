@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     const db = supabase();
     const [lastAny, lastOk, recent] = await Promise.all([
       db.from("hrl_sync_events").select("created_at, status, ok, error").order("created_at", { ascending: false }).limit(1).maybeSingle(),
-      db.from("hrl_sync_events").select("created_at, health_dates").eq("ok", true).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      db.from("hrl_sync_events").select("created_at, health_dates, source").eq("ok", true).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       db.from("hrl_sync_events").select("created_at, status, ok, health_count, error").order("created_at", { ascending: false }).limit(10),
     ]);
     return NextResponse.json({
