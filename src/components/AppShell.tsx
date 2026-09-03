@@ -240,7 +240,9 @@ export default function AppShell() {
 
   return (
     <AppContext.Provider value={value}>
-      <div className="max-w-[520px] mx-auto min-h-dvh pb-20">
+      {/* Top safe-area: zero in the installed PWA (opaque status bar), the real
+          notch inset inside the native shell's web view. */}
+      <div className="max-w-[520px] mx-auto min-h-dvh pb-20" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className={tab === "today" ? "" : "hidden"}>
           <TodayView />
         </div>
